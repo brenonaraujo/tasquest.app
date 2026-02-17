@@ -1,4 +1,5 @@
-import { StyleSheet, Text, View, Pressable } from "react-native";
+import { useState } from "react";
+import { StyleSheet, Text, View, Pressable, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import Colors from "@/constants/colors";
@@ -22,9 +23,11 @@ interface FeedItemCardProps {
   item: FeedItem;
   onDismiss?: (id: string) => void;
   onRestore?: (id: string) => void;
+  isDismissing?: boolean;
+  isRestoring?: boolean;
 }
 
-export default function FeedItemCard({ item, onDismiss, onRestore }: FeedItemCardProps) {
+export default function FeedItemCard({ item, onDismiss, onRestore, isDismissing, isRestoring }: FeedItemCardProps) {
   const config = FEED_CONFIG[item.type] || { icon: "ellipsis-horizontal-circle", color: Colors.textMuted, verb: item.type };
   const payload = item.payload || {};
   const actorName = (payload.actorName as string) || "Someone";
@@ -92,9 +95,14 @@ export default function FeedItemCard({ item, onDismiss, onRestore }: FeedItemCar
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           }}
           hitSlop={10}
+          disabled={!!isRestoring}
           style={({ pressed }) => [styles.restoreBtn, pressed && { opacity: 0.5 }]}
         >
-          <Ionicons name="eye-outline" size={18} color={Colors.primary} />
+          {isRestoring ? (
+            <ActivityIndicator size={14} color={Colors.primary} />
+          ) : (
+            <Ionicons name="eye-outline" size={18} color={Colors.primary} />
+          )}
         </Pressable>
       ) : onDismiss ? (
         <Pressable
@@ -103,9 +111,14 @@ export default function FeedItemCard({ item, onDismiss, onRestore }: FeedItemCar
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           }}
           hitSlop={10}
+          disabled={!!isDismissing}
           style={({ pressed }) => [styles.hideBtn, pressed && { opacity: 0.5 }]}
         >
-          <Ionicons name="eye-off-outline" size={14} color={Colors.textMuted} />
+          {isDismissing ? (
+            <ActivityIndicator size={12} color={Colors.textMuted} />
+          ) : (
+            <Ionicons name="eye-off-outline" size={14} color={Colors.textMuted} />
+          )}
         </Pressable>
       ) : null}
     </Pressable>

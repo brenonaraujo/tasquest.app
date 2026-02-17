@@ -131,21 +131,34 @@ export default function FeedScreen() {
     enabled: isAuthenticated && activeFilter === "hidden",
   });
 
+  const [dismissingIds, setDismissingIds] = useState<Set<string>>(new Set());
+  const [restoringIds, setRestoringIds] = useState<Set<string>>(new Set());
+
   const dismissMutation = useMutation({
     mutationFn: async (feedItemId: string) => {
+      setDismissingIds((prev) => new Set(prev).add(feedItemId));
       await apiRequest("POST", `/api/v1/feed/${feedItemId}/dismiss`);
     },
-    onSuccess: () => {
+    onSuccess: (_data, feedItemId) => {
+      setDismissingIds((prev) => { const n = new Set(prev); n.delete(feedItemId); return n; });
       queryClient.invalidateQueries({ queryKey: ["/api/v1/feed"] });
+    },
+    onError: (_err, feedItemId) => {
+      setDismissingIds((prev) => { const n = new Set(prev); n.delete(feedItemId); return n; });
     },
   });
 
   const restoreMutation = useMutation({
     mutationFn: async (feedItemId: string) => {
+      setRestoringIds((prev) => new Set(prev).add(feedItemId));
       await apiRequest("POST", `/api/v1/feed/${feedItemId}/restore`);
     },
-    onSuccess: () => {
+    onSuccess: (_data, feedItemId) => {
+      setRestoringIds((prev) => { const n = new Set(prev); n.delete(feedItemId); return n; });
       queryClient.invalidateQueries({ queryKey: ["/api/v1/feed"] });
+    },
+    onError: (_err, feedItemId) => {
+      setRestoringIds((prev) => { const n = new Set(prev); n.delete(feedItemId); return n; });
     },
   });
 
@@ -320,6 +333,8 @@ export default function FeedScreen() {
             item={item}
             onDismiss={showingHidden ? undefined : handleDismiss}
             onRestore={showingHidden ? handleRestore : undefined}
+            isDismissing={dismissingIds.has(item.id)}
+            isRestoring={restoringIds.has(item.id)}
           />
         )}
         ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
