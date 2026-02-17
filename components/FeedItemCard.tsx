@@ -1,6 +1,7 @@
-import { StyleSheet, Text, View, Pressable } from "react-native";
+import { StyleSheet, Text, View, Pressable, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import { useQuery } from "@tanstack/react-query";
 import Colors from "@/constants/colors";
 import type { FeedItem, Task } from "@/lib/types";
 import { formatDistanceToNow, format, isPast, isToday } from "date-fns";
@@ -24,71 +25,85 @@ interface FeedItemCardProps {
   onDismiss?: (id: string) => void;
 }
 
-function feedItemToTask(item: FeedItem): Task {
-  const payload = item.payload || {};
-  return {
-    id: (item.taskId as string) || item.id,
-    listId: (item.listId as string) || "",
-    creatorUserId: "",
-    assigneeUserId: (item.actorUserId as string) || null,
-    title: (payload.taskTitle as string) || (payload.title as string) || "",
-    description: (payload.taskDescription as string) || (payload.description as string) || null,
-    dueAt: (payload.dueAt as string) || null,
-    rewardXp: (payload.rewardXp as number) || (payload.xpGained as number) || 0,
-    needsApproval: (payload.needsApproval as boolean) || false,
-    status: ((payload.taskStatus as string) || "in_progress") as Task["status"],
-    completedAt: null,
-    subtasks: [],
-  };
+export default function FeedItemCard({ item, onDismiss }: FeedItemCardProps) {
+  const isInProgress = item.type === "task_started";
+
+  if (isInProgress && item.taskId) {
+    return <ActiveTaskFeedCard item={item} onDismiss={onDismiss} />;
+  }
+
+  return <StandardFeedCard item={item} onDismiss={onDismiss} />;
 }
 
-export default function FeedItemCard({ item, onDismiss }: FeedItemCardProps) {
+function ActiveTaskFeedCard({ item, onDismiss }: FeedItemCardProps) {
+  const payload = item.payload || {};
+  const actorName = (payload.actorName as string) || "Someone";
+  const timeAgo = formatDistanceToNow(new Date(item.createdAt), { addSuffix: true });
+
+  const { data: task, isLoading } = useQuery<Task>({
+    queryKey: [`/api/v1/tasks/${item.taskId}`],
+    enabled: !!item.taskId,
+    staleTime: 60000,
+  });
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingCard}>
+        <ActivityIndicator color={Colors.primary} size="small" />
+      </View>
+    );
+  }
+
+  if (!task) {
+    return <StandardFeedCard item={item} onDismiss={onDismiss} />;
+  }
+
+  return (
+    <View>
+      <TaskCard task={task} />
+      <View style={styles.taskMeta}>
+        <View style={styles.taskMetaLeft}>
+          <View style={styles.avatarSmall}>
+            <Text style={styles.avatarText}>{actorName.charAt(0)}</Text>
+          </View>
+          <Text style={styles.actorSmall}>{actorName}</Text>
+          <Text style={styles.dotSep}>·</Text>
+          <Text style={styles.time}>{timeAgo}</Text>
+        </View>
+        {onDismiss ? (
+          <Pressable
+            onPress={() => {
+              onDismiss(item.id);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+            hitSlop={10}
+            style={({ pressed }) => [pressed && { opacity: 0.5 }]}
+          >
+            <Ionicons name="eye-off-outline" size={14} color={Colors.textMuted} />
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function StandardFeedCard({ item, onDismiss }: FeedItemCardProps) {
   const config = FEED_CONFIG[item.type] || { icon: "ellipsis-horizontal-circle", color: Colors.textMuted, verb: item.type };
   const payload = item.payload || {};
   const actorName = (payload.actorName as string) || "Someone";
   const taskTitle = (payload.taskTitle as string) || (payload.title as string) || "";
-  const xpGained = payload.xpGained as number | undefined;
+  const xpGained = (payload.xpGained as number) || (payload.xp as number) || undefined;
   const rewardXp = payload.rewardXp as number | undefined;
   const newLevel = payload.newLevel as number | undefined;
+  const toLevel = payload.toLevel as number | undefined;
   const dueAt = payload.dueAt as string | undefined;
   const timeAgo = formatDistanceToNow(new Date(item.createdAt), { addSuffix: true });
-  const isInProgress = item.type === "task_started";
 
   const dueDate = dueAt ? new Date(dueAt) : null;
   const isOverdue = dueDate && isPast(dueDate);
   const isDueToday = dueDate && isToday(dueDate);
 
-  if (isInProgress) {
-    const task = feedItemToTask(item);
-
-    return (
-      <View>
-        <TaskCard task={task} />
-        <View style={styles.taskMeta}>
-          <View style={styles.taskMetaLeft}>
-            <View style={styles.avatarSmall}>
-              <Text style={styles.avatarText}>{actorName.charAt(0)}</Text>
-            </View>
-            <Text style={styles.actorSmall}>{actorName}</Text>
-            <Text style={styles.dotSep}>·</Text>
-            <Text style={styles.time}>{timeAgo}</Text>
-          </View>
-          {onDismiss ? (
-            <Pressable
-              onPress={() => {
-                onDismiss(item.id);
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              }}
-              hitSlop={10}
-              style={({ pressed }) => [pressed && { opacity: 0.5 }]}
-            >
-              <Ionicons name="eye-off-outline" size={14} color={Colors.textMuted} />
-            </Pressable>
-          ) : null}
-        </View>
-      </View>
-    );
-  }
+  const displayLevel = newLevel || toLevel;
 
   function handlePress() {
     if (item.taskId) {
@@ -117,10 +132,10 @@ export default function FeedItemCard({ item, onDismiss }: FeedItemCardProps) {
               <Text style={styles.xpVal}>{xpGained ? `+${xpGained}` : `${rewardXp}`}</Text>
             </View>
           ) : null}
-          {newLevel ? (
+          {displayLevel ? (
             <View style={[styles.xpPill, { backgroundColor: Colors.level + "20" }]}>
               <Ionicons name="star" size={10} color={Colors.level} />
-              <Text style={[styles.xpVal, { color: Colors.level }]}>Lv.{newLevel}</Text>
+              <Text style={[styles.xpVal, { color: Colors.level }]}>Lv.{displayLevel}</Text>
             </View>
           ) : null}
           {dueDate ? (
@@ -180,6 +195,14 @@ const styles = StyleSheet.create({
   xpVal: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.xp },
   hideBtn: { padding: 4, marginTop: 2 },
 
+  loadingCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+    alignItems: "center",
+  },
   taskMeta: {
     flexDirection: "row",
     alignItems: "center",
