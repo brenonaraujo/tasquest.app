@@ -32,6 +32,8 @@ const FEED_FILTERS: { key: FeedFilter; label: string; icon: keyof typeof Ionicon
   { key: "hidden", label: "Hidden", icon: "eye-off-outline" },
 ];
 
+const ACTIVE_TASK_TYPES = new Set(["task_started", "task_pending_approval"]);
+
 export default function FeedScreen() {
   const insets = useSafeAreaInsets();
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
@@ -58,6 +60,9 @@ export default function FeedScreen() {
     isLoading: isDismissedLoading,
     refetch: refetchDismissed,
     isRefetching: isDismissedRefetching,
+    fetchNextPage: fetchNextDismissed,
+    hasNextPage: hasNextDismissed,
+    isFetchingNextPage: isFetchingNextDismissed,
   } = useInfiniteQuery<FeedResponse>({
     queryKey: ["/api/v1/feed", { dismissed: true }],
     queryFn: async ({ pageParam }) => {
@@ -85,6 +90,15 @@ export default function FeedScreen() {
     },
   });
 
+  const undismissMutation = useMutation({
+    mutationFn: async (feedItemId: string) => {
+      await apiRequest("DELETE", `/api/v1/feed/${feedItemId}/dismiss`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/v1/feed"] });
+    },
+  });
+
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       router.replace("/(auth)/login");
@@ -104,6 +118,10 @@ export default function FeedScreen() {
     dismissMutation.mutate(id);
   }, [dismissMutation]);
 
+  const handleUndismiss = useCallback((id: string) => {
+    undismissMutation.mutate(id);
+  }, [undismissMutation]);
+
   const allFeedItems = useMemo(() => {
     return data?.pages?.flatMap((page) => page.data) || [];
   }, [data]);
@@ -111,7 +129,7 @@ export default function FeedScreen() {
   const myActiveItems = useMemo(() => {
     return allFeedItems.filter(
       (item) =>
-        item.type === "task_started" &&
+        ACTIVE_TASK_TYPES.has(item.type) &&
         (item.actorUserId === user?.id || item.targetUserId === user?.id)
     );
   }, [allFeedItems, user?.id]);
@@ -129,7 +147,7 @@ export default function FeedScreen() {
     if (activeFilter === "mine") {
       items = items.filter((item) => item.actorUserId === user?.id);
     } else if (activeFilter === "in_progress") {
-      items = items.filter((item) => item.type === "task_started");
+      items = items.filter((item) => ACTIVE_TASK_TYPES.has(item.type));
     } else if (activeFilter === "general") {
       items = items.filter((item) => item.actorUserId !== user?.id);
     }
@@ -137,10 +155,12 @@ export default function FeedScreen() {
   }, [allFeedItems, activeFilter, user?.id, myActiveItems, dismissedItems]);
 
   const handleEndReached = useCallback(() => {
-    if (hasNextPage && !isFetchingNextPage) {
-      fetchNextPage();
+    if (activeFilter === "hidden") {
+      if (hasNextDismissed && !isFetchingNextDismissed) fetchNextDismissed();
+    } else {
+      if (hasNextPage && !isFetchingNextPage) fetchNextPage();
     }
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+  }, [activeFilter, hasNextPage, isFetchingNextPage, fetchNextPage, hasNextDismissed, isFetchingNextDismissed, fetchNextDismissed]);
 
   if (authLoading) {
     return (
@@ -151,6 +171,11 @@ export default function FeedScreen() {
   }
 
   if (!isAuthenticated) return null;
+
+  const showingHidden = activeFilter === "hidden";
+  const currentlyLoading = showingHidden ? isDismissedLoading : isLoading;
+  const currentlyRefreshing = showingHidden ? isDismissedRefetching : isRefetching;
+  const currentlyFetchingNext = showingHidden ? isFetchingNextDismissed : isFetchingNextPage;
 
   return (
     <View style={styles.container}>
@@ -181,7 +206,7 @@ export default function FeedScreen() {
               </View>
             ) : null}
 
-            {activeFilter !== "hidden" && myActiveItems.length > 0 ? (
+            {!showingHidden && myActiveItems.length > 0 ? (
               <View style={styles.activeSection}>
                 <View style={styles.activeSectionHeader}>
                   <Ionicons name="flash" size={16} color={Colors.statusInProgress} />
@@ -235,36 +260,37 @@ export default function FeedScreen() {
         renderItem={({ item }) => (
           <FeedItemCard
             item={item}
-            onDismiss={activeFilter === "hidden" ? undefined : handleDismiss}
+            onDismiss={showingHidden ? undefined : handleDismiss}
+            onUndismiss={showingHidden ? handleUndismiss : undefined}
           />
         )}
         ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.3}
         ListFooterComponent={
-          isFetchingNextPage ? (
+          currentlyFetchingNext ? (
             <View style={styles.footerLoader}>
               <ActivityIndicator color={Colors.primary} />
             </View>
           ) : null
         }
         ListEmptyComponent={
-          (activeFilter === "hidden" ? isDismissedLoading : isLoading) ? (
+          currentlyLoading ? (
             <View style={styles.centered}>
               <ActivityIndicator color={Colors.primary} />
             </View>
           ) : (
             <View style={styles.empty}>
               <Ionicons
-                name={activeFilter === "hidden" ? "eye-outline" : "newspaper-outline"}
+                name={showingHidden ? "eye-outline" : "newspaper-outline"}
                 size={48}
                 color={Colors.textMuted}
               />
               <Text style={styles.emptyTitle}>
-                {activeFilter === "hidden" ? "No hidden activities" : "No activity yet"}
+                {showingHidden ? "No hidden activities" : "No activity yet"}
               </Text>
               <Text style={styles.emptyText}>
-                {activeFilter === "hidden"
+                {showingHidden
                   ? "Activities you dismiss will appear here"
                   : "Create tasks and complete quests to see activity here"}
               </Text>
@@ -273,7 +299,7 @@ export default function FeedScreen() {
         }
         refreshControl={
           <RefreshControl
-            refreshing={activeFilter === "hidden" ? isDismissedRefetching : isRefetching}
+            refreshing={currentlyRefreshing}
             onRefresh={onRefresh}
             tintColor={Colors.primary}
           />

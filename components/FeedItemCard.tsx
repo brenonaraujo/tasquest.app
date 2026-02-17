@@ -20,22 +20,26 @@ const FEED_CONFIG: Record<string, { icon: keyof typeof Ionicons.glyphMap; color:
   reminder_due_today: { icon: "alarm", color: Colors.warning, verb: "due today" },
 };
 
+const ACTIVE_TASK_TYPES = new Set(["task_started", "task_pending_approval"]);
+const ACTIVE_TASK_STATUSES = new Set(["in_progress", "pending_approval"]);
+
 interface FeedItemCardProps {
   item: FeedItem;
   onDismiss?: (id: string) => void;
+  onUndismiss?: (id: string) => void;
 }
 
-export default function FeedItemCard({ item, onDismiss }: FeedItemCardProps) {
-  const isInProgress = item.type === "task_started";
+export default function FeedItemCard({ item, onDismiss, onUndismiss }: FeedItemCardProps) {
+  const isActiveType = ACTIVE_TASK_TYPES.has(item.type);
 
-  if (isInProgress && item.taskId) {
-    return <ActiveTaskFeedCard item={item} onDismiss={onDismiss} />;
+  if (isActiveType && item.taskId) {
+    return <ActiveTaskFeedCard item={item} onDismiss={onDismiss} onUndismiss={onUndismiss} />;
   }
 
-  return <StandardFeedCard item={item} onDismiss={onDismiss} />;
+  return <StandardFeedCard item={item} onDismiss={onDismiss} onUndismiss={onUndismiss} />;
 }
 
-function ActiveTaskFeedCard({ item, onDismiss }: FeedItemCardProps) {
+function ActiveTaskFeedCard({ item, onDismiss, onUndismiss }: FeedItemCardProps) {
   const payload = item.payload || {};
   const actorName = (payload.actorName as string) || "Someone";
   const timeAgo = formatDistanceToNow(new Date(item.createdAt), { addSuffix: true });
@@ -55,7 +59,11 @@ function ActiveTaskFeedCard({ item, onDismiss }: FeedItemCardProps) {
   }
 
   if (!task) {
-    return <StandardFeedCard item={item} onDismiss={onDismiss} />;
+    return <StandardFeedCard item={item} onDismiss={onDismiss} onUndismiss={onUndismiss} />;
+  }
+
+  if (!ACTIVE_TASK_STATUSES.has(task.status)) {
+    return null;
   }
 
   return (
@@ -75,7 +83,7 @@ function ActiveTaskFeedCard({ item, onDismiss }: FeedItemCardProps) {
   );
 }
 
-function StandardFeedCard({ item, onDismiss }: FeedItemCardProps) {
+function StandardFeedCard({ item, onDismiss, onUndismiss }: FeedItemCardProps) {
   const config = FEED_CONFIG[item.type] || { icon: "ellipsis-horizontal-circle", color: Colors.textMuted, verb: item.type };
   const payload = item.payload || {};
   const actorName = (payload.actorName as string) || "Someone";
@@ -92,7 +100,6 @@ function StandardFeedCard({ item, onDismiss }: FeedItemCardProps) {
   const isDueToday = dueDate && isToday(dueDate);
 
   const displayLevel = newLevel || toLevel;
-  const canDismiss = onDismiss && item.type !== "task_started";
 
   function handlePress() {
     if (item.taskId) {
@@ -137,7 +144,18 @@ function StandardFeedCard({ item, onDismiss }: FeedItemCardProps) {
           ) : null}
         </View>
       </View>
-      {canDismiss ? (
+      {onUndismiss ? (
+        <Pressable
+          onPress={() => {
+            onUndismiss(item.id);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          }}
+          hitSlop={10}
+          style={({ pressed }) => [styles.hideBtn, pressed && { opacity: 0.5 }]}
+        >
+          <Ionicons name="eye-outline" size={16} color={Colors.primary} />
+        </Pressable>
+      ) : onDismiss ? (
         <Pressable
           onPress={() => {
             onDismiss(item.id);
