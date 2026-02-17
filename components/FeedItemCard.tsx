@@ -1,12 +1,10 @@
-import { StyleSheet, Text, View, Pressable, ActivityIndicator } from "react-native";
+import { StyleSheet, Text, View, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
 import Colors from "@/constants/colors";
-import type { FeedItem, Task } from "@/lib/types";
+import type { FeedItem } from "@/lib/types";
 import { formatDistanceToNow, format, isPast, isToday } from "date-fns";
 import * as Haptics from "expo-haptics";
-import TaskCard from "@/components/TaskCard";
 
 const FEED_CONFIG: Record<string, { icon: keyof typeof Ionicons.glyphMap; color: string; verb: string }> = {
   task_created: { icon: "add-circle", color: Colors.info, verb: "created a task" },
@@ -20,9 +18,6 @@ const FEED_CONFIG: Record<string, { icon: keyof typeof Ionicons.glyphMap; color:
   reminder_due_today: { icon: "alarm", color: Colors.warning, verb: "due today" },
 };
 
-const ACTIVE_TASK_TYPES = new Set(["task_started", "task_pending_approval"]);
-const ACTIVE_TASK_STATUSES = new Set(["in_progress", "pending_approval"]);
-
 interface FeedItemCardProps {
   item: FeedItem;
   onDismiss?: (id: string) => void;
@@ -30,60 +25,6 @@ interface FeedItemCardProps {
 }
 
 export default function FeedItemCard({ item, onDismiss, onRestore }: FeedItemCardProps) {
-  const isActiveType = ACTIVE_TASK_TYPES.has(item.type);
-
-  if (isActiveType && item.taskId) {
-    return <ActiveTaskFeedCard item={item} />;
-  }
-
-  return <StandardFeedCard item={item} onDismiss={onDismiss} onRestore={onRestore} />;
-}
-
-function ActiveTaskFeedCard({ item }: { item: FeedItem }) {
-  const payload = item.payload || {};
-  const actorName = (payload.actorName as string) || "Someone";
-  const timeAgo = formatDistanceToNow(new Date(item.createdAt), { addSuffix: true });
-
-  const { data: task, isLoading } = useQuery<Task>({
-    queryKey: [`/api/v1/tasks/${item.taskId}`],
-    enabled: !!item.taskId,
-    staleTime: 60000,
-  });
-
-  if (isLoading) {
-    return (
-      <View style={styles.loadingCard}>
-        <ActivityIndicator color={Colors.primary} size="small" />
-      </View>
-    );
-  }
-
-  if (!task) {
-    return <StandardFeedCard item={item} />;
-  }
-
-  if (!ACTIVE_TASK_STATUSES.has(task.status)) {
-    return null;
-  }
-
-  return (
-    <View>
-      <TaskCard task={task} />
-      <View style={styles.taskMeta}>
-        <View style={styles.taskMetaLeft}>
-          <View style={styles.avatarSmall}>
-            <Text style={styles.avatarText}>{actorName.charAt(0)}</Text>
-          </View>
-          <Text style={styles.actorSmall}>{actorName}</Text>
-          <Text style={styles.dotSep}>·</Text>
-          <Text style={styles.time}>{timeAgo}</Text>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-function StandardFeedCard({ item, onDismiss, onRestore }: FeedItemCardProps) {
   const config = FEED_CONFIG[item.type] || { icon: "ellipsis-horizontal-circle", color: Colors.textMuted, verb: item.type };
   const payload = item.payload || {};
   const actorName = (payload.actorName as string) || "Someone";
@@ -202,32 +143,4 @@ const styles = StyleSheet.create({
   xpVal: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.xp },
   hideBtn: { padding: 4, marginTop: 2 },
   restoreBtn: { padding: 4, marginTop: 2 },
-
-  loadingCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-    alignItems: "center",
-  },
-  taskMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 6,
-    paddingHorizontal: 4,
-  },
-  taskMetaLeft: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1 },
-  avatarSmall: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: Colors.primary + "30",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: { fontSize: 9, fontFamily: "Inter_700Bold", color: Colors.primary },
-  actorSmall: { fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
-  dotSep: { fontSize: 11, color: Colors.textMuted },
 });

@@ -15,13 +15,13 @@ import { router } from "expo-router";
 import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
-import Animated, { FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import Colors from "@/constants/colors";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest, queryClient, getApiUrl, getAuthToken } from "@/lib/query-client";
 import XPBar from "@/components/XPBar";
 import FeedItemCard from "@/components/FeedItemCard";
-import type { FeedResponse, FeedItem } from "@/lib/types";
+import TaskCard from "@/components/TaskCard";
+import type { FeedResponse, FeedItem, Task, TaskList } from "@/lib/types";
 
 type FeedFilter = "all" | "mine" | "in_progress" | "general" | "hidden";
 
@@ -33,7 +33,17 @@ const FEED_FILTERS: { key: FeedFilter; label: string; icon: keyof typeof Ionicon
   { key: "hidden", label: "Hidden", icon: "eye-off-outline" },
 ];
 
-const ACTIVE_TASK_TYPES = new Set(["task_started", "task_pending_approval"]);
+const ACTIVE_TASK_STATUSES = new Set(["in_progress", "pending_approval"]);
+
+interface ListTasksResponse {
+  data: Task[];
+  nextCursor?: string | null;
+}
+
+interface ListsResponse {
+  data: TaskList[];
+  nextCursor?: string | null;
+}
 
 export default function FeedScreen() {
   const insets = useSafeAreaInsets();
@@ -55,6 +65,44 @@ export default function FeedScreen() {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
     enabled: isAuthenticated,
+  });
+
+  const { data: activeTasksData, refetch: refetchActiveTasks } = useQuery<Task[]>({
+    queryKey: ["/api/v1/active-tasks"],
+    queryFn: async () => {
+      const token = getAuthToken();
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const baseUrl = getApiUrl();
+
+      const listsRes = await fetch(new URL("/api/v1/lists", baseUrl).toString(), { headers });
+      if (!listsRes.ok) return [];
+      const listsData: ListsResponse = await listsRes.json();
+      const lists = listsData.data || [];
+
+      const allTasks: Task[] = [];
+      await Promise.all(
+        lists.map(async (list) => {
+          try {
+            const tasksRes = await fetch(
+              new URL(`/api/v1/lists/${list.id}/tasks`, baseUrl).toString(),
+              { headers }
+            );
+            if (!tasksRes.ok) return;
+            const tasksData: ListTasksResponse = await tasksRes.json();
+            const tasks = tasksData.data || [];
+            for (const task of tasks) {
+              if (ACTIVE_TASK_STATUSES.has(task.status)) {
+                allTasks.push(task);
+              }
+            }
+          } catch {}
+        })
+      );
+      return allTasks;
+    },
+    enabled: isAuthenticated,
+    staleTime: 30000,
   });
 
   const {
@@ -109,11 +157,12 @@ export default function FeedScreen() {
 
   const onRefresh = useCallback(() => {
     refetch();
+    refetchActiveTasks();
     if (activeFilter === "hidden") {
       refetchAllWithDismissed();
     }
     queryClient.invalidateQueries({ queryKey: ["/api/v1/auth/me"] });
-  }, [refetch, refetchAllWithDismissed, activeFilter]);
+  }, [refetch, refetchActiveTasks, refetchAllWithDismissed, activeFilter]);
 
   const handleDismiss = useCallback((id: string) => {
     dismissMutation.mutate(id);
@@ -127,13 +176,7 @@ export default function FeedScreen() {
     return data?.pages?.flatMap((page) => page.data) || [];
   }, [data]);
 
-  const myActiveItems = useMemo(() => {
-    return allFeedItems.filter(
-      (item) =>
-        ACTIVE_TASK_TYPES.has(item.type) &&
-        (item.actorUserId === user?.id || item.targetUserId === user?.id)
-    );
-  }, [allFeedItems, user?.id]);
+  const myActiveTasks = activeTasksData || [];
 
   const dismissedItems = useMemo(() => {
     const regularIds = new Set(allFeedItems.map((i) => i.id));
@@ -145,17 +188,16 @@ export default function FeedScreen() {
     if (activeFilter === "hidden") {
       return dismissedItems;
     }
-    const myActiveIds = new Set(myActiveItems.map((i) => i.id));
-    let items = allFeedItems.filter((i) => !myActiveIds.has(i.id));
+    let items = allFeedItems;
     if (activeFilter === "mine") {
       items = items.filter((item) => item.actorUserId === user?.id);
     } else if (activeFilter === "in_progress") {
-      items = items.filter((item) => ACTIVE_TASK_TYPES.has(item.type));
+      items = items.filter((item) => item.type === "task_started" || item.type === "task_pending_approval");
     } else if (activeFilter === "general") {
       items = items.filter((item) => item.actorUserId !== user?.id);
     }
     return items;
-  }, [allFeedItems, activeFilter, user?.id, myActiveItems, dismissedItems]);
+  }, [allFeedItems, activeFilter, user?.id, dismissedItems]);
 
   const handleEndReached = useCallback(() => {
     if (activeFilter === "hidden") {
@@ -209,7 +251,7 @@ export default function FeedScreen() {
               </View>
             ) : null}
 
-            {!showingHidden && myActiveItems.length > 0 ? (
+            {!showingHidden && myActiveTasks.length > 0 ? (
               <View style={styles.activeSection}>
                 <Pressable
                   style={styles.activeSectionHeader}
@@ -221,7 +263,7 @@ export default function FeedScreen() {
                   <Ionicons name="flash" size={16} color={Colors.statusInProgress} />
                   <Text style={styles.activeSectionTitle}>Your Active Tasks</Text>
                   <View style={styles.activeBadge}>
-                    <Text style={styles.activeBadgeText}>{myActiveItems.length}</Text>
+                    <Text style={styles.activeBadgeText}>{myActiveTasks.length}</Text>
                   </View>
                   <Ionicons
                     name={activeTasksCollapsed ? "chevron-down" : "chevron-up"}
@@ -230,11 +272,9 @@ export default function FeedScreen() {
                   />
                 </Pressable>
                 {!activeTasksCollapsed ? (
-                  <View>
-                    {myActiveItems.map((item, index) => (
-                      <View key={item.id} style={index > 0 ? { marginTop: 10 } : undefined}>
-                        <FeedItemCard item={item} />
-                      </View>
+                  <View style={{ marginTop: 12, gap: 10 }}>
+                    {myActiveTasks.map((task) => (
+                      <TaskCard key={task.id} task={task} />
                     ))}
                   </View>
                 ) : null}
