@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState, useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -33,6 +33,7 @@ export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
   const { isAuthenticated } = useAuth();
   const topPad = Platform.OS === "web" ? 67 : insets.top;
+  const [showRead, setShowRead] = useState(true);
 
   const { data, isLoading, refetch, isRefetching } = useQuery<NotificationResponse>({
     queryKey: ["/api/v1/notifications"],
@@ -52,7 +53,13 @@ export default function NotificationsScreen() {
     refetch();
   }, [refetch]);
 
-  const notifications = data?.data || [];
+  const allNotifications = data?.data || [];
+  const readCount = allNotifications.filter((n) => n.isRead).length;
+
+  const notifications = useMemo(() => {
+    if (showRead) return allNotifications;
+    return allNotifications.filter((n) => !n.isRead);
+  }, [allNotifications, showRead]);
 
   return (
     <View style={styles.container}>
@@ -65,12 +72,32 @@ export default function NotificationsScreen() {
           paddingBottom: 100,
         }}
         ListHeaderComponent={
-          <View style={styles.header}>
-            <Text style={styles.title}>Notifications</Text>
-            {data?.unreadCount ? (
-              <View style={styles.unreadBadge}>
-                <Text style={styles.unreadText}>{data.unreadCount} unread</Text>
-              </View>
+          <View style={styles.headerWrap}>
+            <View style={styles.header}>
+              <Text style={styles.title}>Notifications</Text>
+              {data?.unreadCount ? (
+                <View style={styles.unreadBadge}>
+                  <Text style={styles.unreadText}>{data.unreadCount} unread</Text>
+                </View>
+              ) : null}
+            </View>
+            {readCount > 0 ? (
+              <Pressable
+                style={({ pressed }) => [styles.toggleReadBtn, pressed && { opacity: 0.7 }]}
+                onPress={() => {
+                  setShowRead((v) => !v);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+              >
+                <Ionicons
+                  name={showRead ? "eye-outline" : "eye-off-outline"}
+                  size={16}
+                  color={Colors.primary}
+                />
+                <Text style={styles.toggleReadText}>
+                  {showRead ? "Hide read" : "Show read"}
+                </Text>
+              </Pressable>
             ) : null}
           </View>
         }
@@ -97,8 +124,22 @@ export default function NotificationsScreen() {
           ) : (
             <View style={styles.empty}>
               <Ionicons name="notifications-off-outline" size={48} color={Colors.textMuted} />
-              <Text style={styles.emptyTitle}>All caught up</Text>
-              <Text style={styles.emptyText}>You'll be notified about tasks and approvals</Text>
+              <Text style={styles.emptyTitle}>
+                {!showRead && readCount > 0 ? "No unread notifications" : "All caught up"}
+              </Text>
+              <Text style={styles.emptyText}>
+                {!showRead && readCount > 0
+                  ? `You have ${readCount} read notification${readCount > 1 ? "s" : ""} hidden`
+                  : "You'll be notified about tasks and approvals"}
+              </Text>
+              {!showRead && readCount > 0 ? (
+                <Pressable
+                  style={({ pressed }) => [styles.showAllBtn, pressed && { opacity: 0.8 }]}
+                  onPress={() => setShowRead(true)}
+                >
+                  <Text style={styles.showAllText}>Show all</Text>
+                </Pressable>
+              ) : null}
             </View>
           )
         }
@@ -117,7 +158,12 @@ function NotifCard({ notification, onPress }: { notification: Notification; onPr
 
   return (
     <Pressable
-      style={({ pressed }) => [styles.card, !notification.isRead && styles.cardUnread, pressed && styles.cardPressed]}
+      style={({ pressed }) => [
+        styles.card,
+        !notification.isRead && styles.cardUnread,
+        notification.isRead && styles.cardRead,
+        pressed && styles.cardPressed,
+      ]}
       onPress={onPress}
     >
       <View style={[styles.iconWrap, { backgroundColor: config.color + "20" }]}>
@@ -140,7 +186,8 @@ function NotifCard({ notification, onPress }: { notification: Notification; onPr
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: 40 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 },
+  headerWrap: { marginBottom: 16 },
+  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
   title: { fontSize: 26, fontFamily: "Inter_700Bold", color: Colors.text },
   unreadBadge: {
     backgroundColor: Colors.danger + "20",
@@ -149,6 +196,19 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   unreadText: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.danger },
+  toggleReadBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: Colors.primary + "12",
+    borderWidth: 1,
+    borderColor: Colors.primary + "30",
+  },
+  toggleReadText: { fontSize: 12, fontFamily: "Inter_500Medium", color: Colors.primary },
   card: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -160,6 +220,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   cardUnread: { borderColor: Colors.primary + "40", backgroundColor: Colors.primary + "08" },
+  cardRead: { opacity: 0.75 },
   cardPressed: { opacity: 0.8 },
   iconWrap: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
   content: { flex: 1, gap: 2 },
@@ -170,5 +231,13 @@ const styles = StyleSheet.create({
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.primary, marginTop: 4 },
   empty: { alignItems: "center", paddingTop: 60, gap: 8 },
   emptyTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text, marginTop: 8 },
-  emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
+  emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" as const },
+  showAllBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: Colors.primary + "15",
+    marginTop: 8,
+  },
+  showAllText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.primary },
 });

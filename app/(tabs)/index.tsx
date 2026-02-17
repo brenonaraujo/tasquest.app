@@ -12,15 +12,15 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import { useAuth } from "@/lib/auth-context";
-import { queryClient } from "@/lib/query-client";
+import { apiRequest, queryClient } from "@/lib/query-client";
 import XPBar from "@/components/XPBar";
 import FeedItemCard from "@/components/FeedItemCard";
-import type { FeedResponse } from "@/lib/types";
+import type { FeedResponse, FeedItem } from "@/lib/types";
 
 type FeedFilter = "all" | "mine" | "in_progress" | "general";
 
@@ -36,16 +36,29 @@ export default function FeedScreen() {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const [activeFilter, setActiveFilter] = useState<FeedFilter>("all");
-  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
 
   const {
-    data: feedData,
+    data,
     isLoading,
     refetch,
     isRefetching,
-  } = useQuery<FeedResponse>({
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery<FeedResponse>({
     queryKey: ["/api/v1/feed"],
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
     enabled: isAuthenticated,
+  });
+
+  const dismissMutation = useMutation({
+    mutationFn: async (feedItemId: string) => {
+      await apiRequest("POST", `/api/v1/feed/${feedItemId}/dismiss`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/v1/feed"] });
+    },
   });
 
   useEffect(() => {
@@ -59,19 +72,16 @@ export default function FeedScreen() {
     queryClient.invalidateQueries({ queryKey: ["/api/v1/auth/me"] });
   }, [refetch]);
 
-  const toggleHide = useCallback((id: string) => {
-    setHiddenIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
+  const handleDismiss = useCallback((id: string) => {
+    dismissMutation.mutate(id);
+  }, [dismissMutation]);
 
-  const feedItems = feedData?.data || [];
+  const allFeedItems = useMemo(() => {
+    return data?.pages?.flatMap((page) => page.data) || [];
+  }, [data]);
 
   const filteredItems = useMemo(() => {
-    let items = feedItems;
+    let items = allFeedItems;
     if (activeFilter === "mine") {
       items = items.filter((item) => item.actorUserId === user?.id);
     } else if (activeFilter === "in_progress") {
@@ -79,11 +89,16 @@ export default function FeedScreen() {
     } else if (activeFilter === "general") {
       items = items.filter((item) => item.actorUserId !== user?.id);
     }
-    const inProgress = items.filter((i) => i.type === "task_started" && !hiddenIds.has(i.id));
-    const visible = items.filter((i) => i.type !== "task_started" && !hiddenIds.has(i.id));
-    const hidden = items.filter((i) => hiddenIds.has(i.id));
-    return [...inProgress, ...visible, ...hidden];
-  }, [feedItems, activeFilter, user?.id, hiddenIds]);
+    const inProgress = items.filter((i) => i.type === "task_started");
+    const rest = items.filter((i) => i.type !== "task_started");
+    return [...inProgress, ...rest];
+  }, [allFeedItems, activeFilter, user?.id]);
+
+  const handleEndReached = useCallback(() => {
+    if (hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
+    }
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   if (authLoading) {
     return (
@@ -158,13 +173,18 @@ export default function FeedScreen() {
           </View>
         }
         renderItem={({ item }) => (
-          <FeedItemCard
-            item={item}
-            hidden={hiddenIds.has(item.id)}
-            onToggleHide={toggleHide}
-          />
+          <FeedItemCard item={item} onDismiss={handleDismiss} />
         )}
         ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={0.3}
+        ListFooterComponent={
+          isFetchingNextPage ? (
+            <View style={styles.footerLoader}>
+              <ActivityIndicator color={Colors.primary} />
+            </View>
+          ) : null
+        }
         ListEmptyComponent={
           isLoading ? (
             <View style={styles.centered}>
@@ -252,6 +272,7 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     fontFamily: "Inter_600SemiBold",
   },
+  footerLoader: { paddingVertical: 20, alignItems: "center" },
   empty: { alignItems: "center", paddingTop: 40, gap: 8 },
   emptyTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text, marginTop: 8 },
   emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" as const },

@@ -306,15 +306,15 @@ function CommentCard({ comment, onVote }: { comment: TaskComment; onVote: (v: -1
           style={[styles.voteBtn, comment.userVote === 1 && styles.voteBtnActive]}
           onPress={() => onVote(comment.userVote === 1 ? 0 : 1)}
         >
-          <Ionicons name="thumbs-up" size={14} color={comment.userVote === 1 ? Colors.success : Colors.textMuted} />
-          <Text style={[styles.voteCount, comment.userVote === 1 && { color: Colors.success }]}>{comment.likes}</Text>
+          <Ionicons name="thumbs-up" size={14} color={comment.userVote === 1 ? Colors.primary : Colors.textMuted} />
+          <Text style={[styles.voteCount, comment.userVote === 1 && { color: Colors.primary }]}>{comment.likes}</Text>
         </Pressable>
         <Pressable
           style={[styles.voteBtn, comment.userVote === -1 && styles.voteBtnActive]}
           onPress={() => onVote(comment.userVote === -1 ? 0 : -1)}
         >
-          <Ionicons name="thumbs-down" size={14} color={comment.userVote === -1 ? Colors.danger : Colors.textMuted} />
-          <Text style={[styles.voteCount, comment.userVote === -1 && { color: Colors.danger }]}>{comment.dislikes}</Text>
+          <Ionicons name="thumbs-down" size={14} color={comment.userVote === -1 ? Colors.primaryDark : Colors.textMuted} />
+          <Text style={[styles.voteCount, comment.userVote === -1 && { color: Colors.primaryDark }]}>{comment.dislikes}</Text>
         </Pressable>
       </View>
     </View>
@@ -401,7 +401,7 @@ const styles = StyleSheet.create({
   commentContent: { fontSize: 14, color: Colors.text, fontFamily: "Inter_400Regular", lineHeight: 20 },
   voteRow: { flexDirection: "row", gap: 12, marginTop: 8 },
   voteBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingVertical: 2, paddingHorizontal: 6, borderRadius: 6 },
-  voteBtnActive: { backgroundColor: Colors.surfaceLight },
+  voteBtnActive: { backgroundColor: Colors.primary + "12" },
   voteCount: { fontSize: 12, fontFamily: "Inter_500Medium", color: Colors.textMuted },
   commentBar: {
     flexDirection: "row",

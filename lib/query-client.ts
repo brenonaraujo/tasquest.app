@@ -60,9 +60,13 @@ export const getQueryFn: <T>(options: {
   on401: UnauthorizedBehavior;
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
-  async ({ queryKey }) => {
+  async ({ queryKey, pageParam }) => {
     const baseUrl = getApiUrl();
     const url = new URL(queryKey.join("/") as string, baseUrl);
+
+    if (pageParam) {
+      url.searchParams.set("cursor", String(pageParam));
+    }
 
     const headers: Record<string, string> = {};
     if (_authToken) headers["Authorization"] = `Bearer ${_authToken}`;
