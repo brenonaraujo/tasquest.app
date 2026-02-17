@@ -39,6 +39,7 @@ export default function TaskDetailScreen() {
   const [commentText, setCommentText] = useState("");
   const [togglingSubtasks, setTogglingSubtasks] = useState<Set<string>>(new Set());
   const [votingComments, setVotingComments] = useState<Set<string>>(new Set());
+  const [votingDirection, setVotingDirection] = useState<Record<string, "up" | "down">>({});
 
   const {
     data: taskData,
@@ -98,14 +99,17 @@ export default function TaskDetailScreen() {
   const voteMutation = useMutation({
     mutationFn: async ({ commentId, value }: { commentId: string; value: -1 | 0 | 1 }) => {
       setVotingComments((prev) => new Set(prev).add(commentId));
+      setVotingDirection((prev) => ({ ...prev, [commentId]: value >= 0 ? "up" : "down" }));
       return apiRequest("POST", `/api/v1/comments/${commentId}/vote`, { value } as VoteTaskCommentRequest);
     },
     onSuccess: (_data, { commentId }) => {
       setVotingComments((prev) => { const n = new Set(prev); n.delete(commentId); return n; });
+      setVotingDirection((prev) => { const n = { ...prev }; delete n[commentId]; return n; });
       refetchComments();
     },
     onError: (_err, { commentId }) => {
       setVotingComments((prev) => { const n = new Set(prev); n.delete(commentId); return n; });
+      setVotingDirection((prev) => { const n = { ...prev }; delete n[commentId]; return n; });
     },
   });
 
@@ -255,7 +259,7 @@ export default function TaskDetailScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Comments ({comments.length})</Text>
             {comments.map((c) => (
-              <CommentCard key={c.id} comment={c} onVote={(val) => voteMutation.mutate({ commentId: c.id, value: val })} isVoting={votingComments.has(c.id)} />
+              <CommentCard key={c.id} comment={c} onVote={(val) => voteMutation.mutate({ commentId: c.id, value: val })} isVoting={votingComments.has(c.id)} votingDir={votingDirection[c.id]} />
             ))}
             {comments.length === 0 ? (
               <Text style={styles.noComments}>No comments yet</Text>
@@ -319,7 +323,7 @@ function ActionBtn({
   );
 }
 
-function CommentCard({ comment, onVote, isVoting }: { comment: TaskComment; onVote: (v: -1 | 0 | 1) => void; isVoting?: boolean }) {
+function CommentCard({ comment, onVote, isVoting, votingDir }: { comment: TaskComment; onVote: (v: -1 | 0 | 1) => void; isVoting?: boolean; votingDir?: "up" | "down" }) {
   return (
     <View style={styles.commentCard}>
       <View style={styles.commentHeader}>
@@ -330,7 +334,6 @@ function CommentCard({ comment, onVote, isVoting }: { comment: TaskComment; onVo
           <Text style={styles.commentAuthor}>{comment.author.name}</Text>
           <Text style={styles.commentTime}>{format(new Date(comment.createdAt), "MMM d, h:mm a")}</Text>
         </View>
-        {isVoting ? <ActivityIndicator size={12} color={Colors.primary} /> : null}
       </View>
       <Text style={styles.commentContent}>{comment.content}</Text>
       <View style={styles.voteRow}>
@@ -339,7 +342,11 @@ function CommentCard({ comment, onVote, isVoting }: { comment: TaskComment; onVo
           onPress={() => onVote(comment.userVote === 1 ? 0 : 1)}
           disabled={!!isVoting}
         >
-          <Ionicons name="thumbs-up" size={14} color={comment.userVote === 1 ? Colors.primary : Colors.textMuted} />
+          {isVoting && votingDir === "up" ? (
+            <ActivityIndicator size={12} color={Colors.primary} />
+          ) : (
+            <Ionicons name="thumbs-up" size={14} color={comment.userVote === 1 ? Colors.primary : Colors.textMuted} />
+          )}
           <Text style={[styles.voteCount, comment.userVote === 1 && { color: Colors.primary }]}>{comment.likes}</Text>
         </Pressable>
         <Pressable
@@ -347,7 +354,11 @@ function CommentCard({ comment, onVote, isVoting }: { comment: TaskComment; onVo
           onPress={() => onVote(comment.userVote === -1 ? 0 : -1)}
           disabled={!!isVoting}
         >
-          <Ionicons name="thumbs-down" size={14} color={comment.userVote === -1 ? Colors.primaryDark : Colors.textMuted} />
+          {isVoting && votingDir === "down" ? (
+            <ActivityIndicator size={12} color={Colors.primaryDark} />
+          ) : (
+            <Ionicons name="thumbs-down" size={14} color={comment.userVote === -1 ? Colors.primaryDark : Colors.textMuted} />
+          )}
           <Text style={[styles.voteCount, comment.userVote === -1 && { color: Colors.primaryDark }]}>{comment.dislikes}</Text>
         </Pressable>
       </View>
