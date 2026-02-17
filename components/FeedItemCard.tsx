@@ -70,18 +70,6 @@ function ActiveTaskFeedCard({ item, onDismiss }: FeedItemCardProps) {
           <Text style={styles.dotSep}>·</Text>
           <Text style={styles.time}>{timeAgo}</Text>
         </View>
-        {onDismiss ? (
-          <Pressable
-            onPress={() => {
-              onDismiss(item.id);
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            }}
-            hitSlop={10}
-            style={({ pressed }) => [pressed && { opacity: 0.5 }]}
-          >
-            <Ionicons name="eye-off-outline" size={14} color={Colors.textMuted} />
-          </Pressable>
-        ) : null}
       </View>
     </View>
   );
@@ -104,6 +92,7 @@ function StandardFeedCard({ item, onDismiss }: FeedItemCardProps) {
   const isDueToday = dueDate && isToday(dueDate);
 
   const displayLevel = newLevel || toLevel;
+  const canDismiss = onDismiss && item.type !== "task_started";
 
   function handlePress() {
     if (item.taskId) {
@@ -148,7 +137,7 @@ function StandardFeedCard({ item, onDismiss }: FeedItemCardProps) {
           ) : null}
         </View>
       </View>
-      {onDismiss ? (
+      {canDismiss ? (
         <Pressable
           onPress={() => {
             onDismiss(item.id);

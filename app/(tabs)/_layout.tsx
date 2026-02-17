@@ -17,7 +17,8 @@ function useUnreadCount() {
     enabled: isAuthenticated,
     refetchInterval: 30000,
   });
-  return data?.unreadCount || 0;
+  if (data?.unreadCount != null) return data.unreadCount;
+  return data?.data?.filter((n) => !n.isRead).length || 0;
 }
 
 function NativeTabLayout() {
