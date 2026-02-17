@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -34,7 +34,10 @@ export default function ProfileScreen() {
     refreshProfile();
   }, [refreshProfile]);
 
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
   async function handleLogout() {
+    setIsLoggingOut(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await logout();
     router.replace("/(auth)/login");
@@ -100,9 +103,14 @@ export default function ProfileScreen() {
       <Pressable
         style={({ pressed }) => [styles.logoutBtn, pressed && { opacity: 0.8 }]}
         onPress={handleLogout}
+        disabled={isLoggingOut}
       >
-        <Ionicons name="log-out-outline" size={18} color={Colors.danger} />
-        <Text style={styles.logoutText}>Sign Out</Text>
+        {isLoggingOut ? (
+          <ActivityIndicator size={16} color={Colors.danger} />
+        ) : (
+          <Ionicons name="log-out-outline" size={18} color={Colors.danger} />
+        )}
+        <Text style={styles.logoutText}>{isLoggingOut ? "Signing out..." : "Sign Out"}</Text>
       </Pressable>
     </ScrollView>
   );

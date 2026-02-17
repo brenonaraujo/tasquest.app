@@ -40,12 +40,19 @@ export default function NotificationsScreen() {
     enabled: isAuthenticated,
   });
 
+  const [markingReadIds, setMarkingReadIds] = useState<Set<string>>(new Set());
+
   const markReadMutation = useMutation({
     mutationFn: async (id: string) => {
+      setMarkingReadIds((prev) => new Set(prev).add(id));
       await apiRequest("POST", `/api/v1/notifications/${id}/read`);
     },
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
+      setMarkingReadIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
       queryClient.invalidateQueries({ queryKey: ["/api/v1/notifications"] });
+    },
+    onError: (_err, id) => {
+      setMarkingReadIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
     },
   });
 
@@ -104,6 +111,7 @@ export default function NotificationsScreen() {
         renderItem={({ item }) => (
           <NotifCard
             notification={item}
+            isMarkingRead={markingReadIds.has(item.id)}
             onPress={() => {
               if (!item.isRead) {
                 markReadMutation.mutate(item.id);
@@ -152,7 +160,7 @@ export default function NotificationsScreen() {
   );
 }
 
-function NotifCard({ notification, onPress }: { notification: Notification; onPress: () => void }) {
+function NotifCard({ notification, onPress, isMarkingRead }: { notification: Notification; onPress: () => void; isMarkingRead?: boolean }) {
   const config = NOTIF_ICONS[notification.type] || { icon: "ellipsis-horizontal-circle", color: Colors.textMuted };
   const timeAgo = formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true });
 
@@ -165,6 +173,7 @@ function NotifCard({ notification, onPress }: { notification: Notification; onPr
         pressed && styles.cardPressed,
       ]}
       onPress={onPress}
+      disabled={!!isMarkingRead}
     >
       <View style={[styles.iconWrap, { backgroundColor: config.color + "20" }]}>
         <Ionicons name={config.icon} size={20} color={config.color} />
@@ -178,7 +187,11 @@ function NotifCard({ notification, onPress }: { notification: Notification; onPr
         </Text>
         <Text style={styles.notifTime}>{timeAgo}</Text>
       </View>
-      {!notification.isRead ? <View style={styles.dot} /> : null}
+      {isMarkingRead ? (
+        <ActivityIndicator size={12} color={Colors.primary} style={{ marginTop: 4 }} />
+      ) : !notification.isRead ? (
+        <View style={styles.dot} />
+      ) : null}
     </Pressable>
   );
 }
