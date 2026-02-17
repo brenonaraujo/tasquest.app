@@ -59,7 +59,6 @@ export default function ProfileScreen() {
         paddingHorizontal: 16,
         paddingBottom: 120 + bottomPad,
       }}
-      contentInsetAdjustmentBehavior="automatic"
       refreshControl={<RefreshControl refreshing={false} onRefresh={onRefresh} tintColor={Colors.primary} />}
       showsVerticalScrollIndicator={false}
     >

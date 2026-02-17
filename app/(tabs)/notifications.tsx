@@ -64,7 +64,6 @@ export default function NotificationsScreen() {
           paddingHorizontal: 16,
           paddingBottom: 100,
         }}
-        contentInsetAdjustmentBehavior="automatic"
         ListHeaderComponent={
           <View style={styles.header}>
             <Text style={styles.title}>Notifications</Text>
