@@ -11,7 +11,7 @@ import {
   ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
@@ -50,7 +50,7 @@ export default function FeedScreen() {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const [activeFilter, setActiveFilter] = useState<FeedFilter>("all");
-  const [activeTasksCollapsed, setActiveTasksCollapsed] = useState(false);
+  const [activeTasksExpanded, setActiveTasksExpanded] = useState(false);
 
   const {
     data,
@@ -67,7 +67,12 @@ export default function FeedScreen() {
     enabled: isAuthenticated,
   });
 
-  const { data: activeTasksData, refetch: refetchActiveTasks } = useQuery<Task[]>({
+  const { data: activeTasksCountData } = useQuery<{ data: TaskList[] }>({
+    queryKey: ["/api/v1/lists"],
+    enabled: isAuthenticated,
+  });
+
+  const { data: activeTasksData, refetch: refetchActiveTasks, isLoading: isActiveTasksLoading } = useQuery<Task[]>({
     queryKey: ["/api/v1/active-tasks"],
     queryFn: async () => {
       const token = getAuthToken();
@@ -101,8 +106,8 @@ export default function FeedScreen() {
       );
       return allTasks;
     },
-    enabled: isAuthenticated,
-    staleTime: 30000,
+    enabled: isAuthenticated && activeTasksExpanded,
+    staleTime: 0,
   });
 
   const {
@@ -162,6 +167,15 @@ export default function FeedScreen() {
     },
   });
 
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        setActiveTasksExpanded(false);
+        queryClient.removeQueries({ queryKey: ["/api/v1/active-tasks"] });
+      };
+    }, [])
+  );
+
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       router.replace("/(auth)/login");
@@ -170,12 +184,12 @@ export default function FeedScreen() {
 
   const onRefresh = useCallback(() => {
     refetch();
-    refetchActiveTasks();
+    if (activeTasksExpanded) refetchActiveTasks();
     if (activeFilter === "hidden") {
       refetchAllWithDismissed();
     }
     queryClient.invalidateQueries({ queryKey: ["/api/v1/auth/me"] });
-  }, [refetch, refetchActiveTasks, refetchAllWithDismissed, activeFilter]);
+  }, [refetch, refetchActiveTasks, refetchAllWithDismissed, activeFilter, activeTasksExpanded]);
 
   const handleDismiss = useCallback((id: string) => {
     dismissMutation.mutate(id);
@@ -264,31 +278,39 @@ export default function FeedScreen() {
               </View>
             ) : null}
 
-            {!showingHidden && myActiveTasks.length > 0 ? (
+            {!showingHidden ? (
               <View style={styles.activeSection}>
                 <Pressable
                   style={styles.activeSectionHeader}
                   onPress={() => {
-                    setActiveTasksCollapsed((c) => !c);
+                    setActiveTasksExpanded((c) => !c);
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   }}
                 >
                   <Ionicons name="flash" size={16} color={Colors.statusInProgress} />
                   <Text style={styles.activeSectionTitle}>Your Active Tasks</Text>
-                  <View style={styles.activeBadge}>
-                    <Text style={styles.activeBadgeText}>{myActiveTasks.length}</Text>
-                  </View>
+                  {myActiveTasks.length > 0 ? (
+                    <View style={styles.activeBadge}>
+                      <Text style={styles.activeBadgeText}>{myActiveTasks.length}</Text>
+                    </View>
+                  ) : null}
                   <Ionicons
-                    name={activeTasksCollapsed ? "chevron-down" : "chevron-up"}
+                    name={activeTasksExpanded ? "chevron-up" : "chevron-down"}
                     size={16}
                     color={Colors.statusInProgress}
                   />
                 </Pressable>
-                {!activeTasksCollapsed ? (
+                {activeTasksExpanded ? (
                   <View style={{ marginTop: 12, gap: 10 }}>
-                    {myActiveTasks.map((task) => (
-                      <TaskCard key={task.id} task={task} />
-                    ))}
+                    {isActiveTasksLoading ? (
+                      <ActivityIndicator color={Colors.statusInProgress} style={{ paddingVertical: 12 }} />
+                    ) : myActiveTasks.length === 0 ? (
+                      <Text style={styles.activeEmptyText}>No active tasks right now</Text>
+                    ) : (
+                      myActiveTasks.map((task) => (
+                        <TaskCard key={task.id} task={task} />
+                      ))
+                    )}
                   </View>
                 ) : null}
               </View>
@@ -444,6 +466,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: "Inter_700Bold",
     color: Colors.statusInProgress,
+  },
+  activeEmptyText: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textSecondary,
+    textAlign: "center" as const,
+    paddingVertical: 8,
   },
   sectionRow: {
     flexDirection: "row",

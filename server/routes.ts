@@ -37,6 +37,36 @@ async function proxyToApi(req: Request, res: Response) {
 
     if (contentType?.includes("application/json")) {
       const data = await response.json();
+      if (path.startsWith("/v1/feed") && data?.data && Array.isArray(data.data)) {
+        const needsEnrich = data.data.filter(
+          (item: any) => item.taskId && item.payload && !item.payload.taskTitle && !item.payload.title
+        );
+        if (needsEnrich.length > 0) {
+          const taskIds = [...new Set(needsEnrich.map((item: any) => item.taskId))] as string[];
+          const taskDetails: Record<string, any> = {};
+          await Promise.all(
+            taskIds.map(async (tid) => {
+              try {
+                const taskRes = await fetch(`${TASKQUEST_API_URL}/v1/tasks/${tid}`, { headers });
+                if (taskRes.ok) {
+                  taskDetails[tid] = await taskRes.json();
+                }
+              } catch {}
+            })
+          );
+          for (const item of data.data) {
+            if (item.taskId && taskDetails[item.taskId] && !item.payload?.taskTitle && !item.payload?.title) {
+              const task = taskDetails[item.taskId];
+              item.payload = {
+                ...item.payload,
+                taskTitle: task.title || "",
+                rewardXp: task.rewardXp || 0,
+                dueAt: task.dueAt || null,
+              };
+            }
+          }
+        }
+      }
       return res.status(response.status).json(data);
     }
 

@@ -30,13 +30,13 @@ interface FeedItemCardProps {
 export default function FeedItemCard({ item, onDismiss, onRestore, isDismissing, isRestoring }: FeedItemCardProps) {
   const config = FEED_CONFIG[item.type] || { icon: "ellipsis-horizontal-circle", color: Colors.textMuted, verb: item.type };
   const payload = item.payload || {};
-  const actorName = (payload.actorName as string) || "Someone";
-  const taskTitle = (payload.taskTitle as string) || (payload.title as string) || "";
-  const xpGained = (payload.xpGained as number) || (payload.xp as number) || undefined;
-  const rewardXp = payload.rewardXp as number | undefined;
+  const actorName = (payload.actorName as string) || (payload.actor_name as string) || (payload.userName as string) || "Someone";
+  const taskTitle = (payload.taskTitle as string) || (payload.title as string) || (payload.taskName as string) || (payload.task_title as string) || (payload.name as string) || "";
+  const xpGained = (payload.xpGained as number) || (payload.xp as number) || (payload.xp_gained as number) || undefined;
+  const rewardXp = (payload.rewardXp as number) || (payload.reward_xp as number) || (payload.xpReward as number) || undefined;
   const newLevel = payload.newLevel as number | undefined;
   const toLevel = payload.toLevel as number | undefined;
-  const dueAt = payload.dueAt as string | undefined;
+  const dueAt = (payload.dueAt as string) || (payload.due_at as string) || (payload.dueDate as string) || undefined;
   const timeAgo = formatDistanceToNow(new Date(item.createdAt), { addSuffix: true });
 
   const dueDate = dueAt ? new Date(dueAt) : null;
