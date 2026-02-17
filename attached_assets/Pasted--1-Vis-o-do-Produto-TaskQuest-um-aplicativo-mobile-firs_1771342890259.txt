@@ -1,0 +1,172 @@
+# 1. Visão do Produto
+
+**TaskQuest** é um aplicativo mobile-first de gestão de tarefas social e gamificado.
+O objetivo é aumentar a execução de tarefas do dia a dia por meio de colaboração entre amigos/família e incentivos com XP, níveis e rankings.
+
+### 1.1 Problema
+
+- To-do lists tradicionais têm baixa retenção e baixa motivação.
+- Famílias e grupos pequenos precisam de coordenação com visibilidade compartilhada.
+- Falta uma mecânica clara de recompensa por execução real.
+
+### 1.2 Proposta de Valor
+
+- Tarefas com recompensa em XP definida pelo criador.
+- Colaboração em listas compartilhadas.
+- Fluxo de aprovação para tarefas que exigem validação.
+- Feed principal com contexto social em vez de lista estática.
+
+### 1.3 Público-alvo MVP
+
+- Famílias (pais, filhos, responsáveis).
+- Casais e roommates.
+- Pequenos grupos de amigos.
+
+## 2. Objetivos do MVP
+
+### 2.1 Objetivos de Produto
+
+- Entregar ciclo completo: criar tarefa -> executar -> aprovar (se necessário) -> receber XP.
+- Introduzir progressão de nível simples e compreensível.
+- Validar engajamento com feed social e rankings.
+
+### 2.2 Objetivos de Negócio
+
+- Atingir base inicial com uso recorrente diário.
+- Demonstrar aumento de tarefas concluídas por usuário ativo.
+
+### 2.3 Não Objetivos (MVP)
+
+- Marketplace de recompensas.
+- Integrações com calendário externo.
+- Chat em tempo real.
+
+## 3. Métricas de Sucesso
+
+- DAU/WAU.
+- % de tarefas concluídas dentro do prazo.
+- Tempo médio entre criação e conclusão.
+- Taxa de tarefas com aprovação concluídas com sucesso.
+- Retenção D7 e D30.
+- XP médio ganho por usuário/semana.
+
+## 4. Escopo Funcional
+
+### 4.1 Contas e Identidade
+
+- Cadastro e login.
+- Perfil básico (nome, avatar opcional).
+
+### 4.2 Listas e Tarefas
+
+- Criar lista individual.
+- Criar lista compartilhada.
+- Convidar participantes para listas compartilhadas.
+- Criar tarefas com:
+  - título (obrigatório)
+  - descrição (opcional)
+  - data de conclusão (opcional)
+  - subtarefas (opcional)
+  - reward XP (5 a 50)
+  - atribuir a alguem ou deixar sem atribuição para que outros peguem.
+  - flag `needs_approval` (opcional)
+
+### 4.3 Lógica de Conclusão
+
+- Tarefas devem status: `open`, `in_progress`, `pending_approval`, `completed`.
+- Tarefa com subtarefas só pode ser concluída se todas estiverem finalizadas.
+- Se `needs_approval=true`, executor envia para aprovação e só recebe XP após aprovação.
+- Se `needs_approval=false`, executor recebe XP imediatamente ao concluir.
+- Aprovação por criador da tarefa ou owner/admin da lista.
+- Rejeição retorna tarefa para estado editável sem ganho de XP.
+- Tarefas sem atribuição podem ser pegas por qualquer usuário, mas só um pode ser executor ativo e a atribuição deve ser aprovada pelo criador da tarefa ou owner/admin da lista.
+- Tarefas atribuídas a alguém que não seja o executor ativo podem ser reatribuídas ou desatribuídas pelo criador da tarefa ou owner/admin da lista.
+- Tarefas podem ter subtarefas dentro dela que que tem apenas um simples checkbox de conclusão, sem necessidade de aprovação, e a tarefa principal só pode ser concluída quando todas as subtarefas estiverem concluídas.
+- Tarefas podem ser editadas pelo criador da tarefa ou owner/admin da lista, mas não podem ter o `reward_xp` reduzido para evitar abuso.
+- Tarefas em in_progress devem permitir que o executor cancele a execução e retorne para `open` para que outros possam pegar, mas isso deve ser registrado no feed para evitar abuso.
+- Tarefas concluídas ou pendentes de aprovação não podem ser editadas para evitar confusão e abuso, mas podem ser comentadas para comunicação entre executor e criador/aprovador.
+
+### 4.4 Gamificação
+
+- Cada usuário possui energia para criar tarefas, fazer comentários e interagir (`creation_xp_balance`).
+- cada usuário recebe 100 Stamina/Energia diariamente, que é consumida ao criar tarefas e interagir, essa energia é recarregada diariamente.
+- Criar tarefa consome saldo de criação do criador, a quantidade de saldo consumida é definido por uma formula simples baseada no XP de recompensa da tarefa (ex.: `reward_xp`/ 2 + 10% de `reward_xp` como taxa) 50/2 = 25 + 5 = 30, tanto o multiplicador quanto a taxa são configuráveis e podem ser ajustados para balanceamento.
+- Executor aprovado ganha XP em `total_xp`.
+- Sistema de nível progressivo baseado em XP acumulado, com fórmula simples (ex.: XP para próximo nível = `100 * nivel_atual`).
+- Perfil do usuário exibe nível atual, XP total e progresso para próximo nível.
+- A quantidade de energia recarregada diariamente é configurável (ex.: +100 XP/dia) e tem um cap máximo (ex.: 2000 XP).
+- A energia gasta por interação (criar tarefa, comentar, votar) é configurável (Ex. comentar - 2 Energia/Stamina, votar - 1 Energia/Stamina).
+- Ao concluir tarefa, o executor recebe XP e o criador da tarefa recebe uma pequena recompensa de XP (ex.: 10% do `reward_xp`) para incentivar a criação de tarefas valiosas.
+- O sistema de XP e níveis deve ser transparente e compreensível para os usuários, com feedback claro sobre ganhos de XP e progresso.
+- O sistema de gamificação deve ser projetado para incentivar a colaboração e a execução de tarefas, evitando mecânicas que possam levar a comportamentos tóxicos ou competição excessiva.
+- O sistema de gamificação deve ser flexível o suficiente para permitir ajustes futuros com base no feedback dos usuários e dados de engajamento.
+- O sistema de gamificação deve ser implementado de forma que seja fácil adicionar novas mecânicas de recompensa ou penalidade no futuro, como streaks, missões semanais ou recompensas resgatáveis.
+- O sistema deve prever a implementação de itens cosméticos ou status especiais que podem ser desbloqueados, comprados, ganhados ou presenteados, mesmo que não sejam parte do MVP, para garantir que a arquitetura suporte facilmente a evolução da gamificação.
+- Ranking global e ranking por lista.
+
+### 4.5 Feed Principal
+
+- Tarefas do usuário.
+- Tarefas pendentes de aprovação (para quem precisa aprovar).
+- Tarefas abertas nas listas do usuario e as quais o usuario faz parte.
+- Atualizações sociais (criou tarefa, concluiu, aprovou, subiu de nível).
+
+### 4.6 Notificações in-app
+
+- Listagem de notificações do usuário autenticado.
+- Marcação individual de notificação como lida.
+- Navegação a partir da notificação para tarefa, perfl tarefa ou feed relevante.
+- Contagem de não lidas para priorização de atenção.
+
+### 4.7 Comentários em tarefas
+
+- Comentários vinculados à tarefa para contexto de execução.
+- Ordenação por relevância e recência.
+- Voto em comentário para destacar contribuições úteis.
+- comentarios de comentarios (thread) para permitir discussões mais organizadas, especialmente em tarefas complexas ou com múltiplos envolvidos.
+
+## 5. Regras de Negócio
+
+### 5.1 Economia de XP e Energia/Stamina
+
+- `reward_xp` por tarefa: mínimo 5, máximo limite de energia do usuario..
+- Criação de tarefa falha se saldo de criação insuficiente.
+- Saldo de criação inicial: 100 pontos de energia/stamina.
+- Recarga diária de saldo de criação: +100 Energia (cap configurável, ex.: 200) items podem aumentar o cap de energia do usuário.
+- Interações como comentar e votar também consomem energia, com custos configuráveis (ex.: comentar - 2 Energia, votar - 1 Energia).
+- Criador da tarefa recebe uma pequena recompensa de XP (ex.: 10% do `reward_xp`) quando a tarefa é concluída para incentivar a criação de tarefas valiosas.
+- O sistema de XP e níveis deve ser transparente e compreensível para os usuários, com feedback claro sobre ganhos de XP e progresso.
+
+### 5.2 Sugestão de XP por IA
+
+- Entrada: título e descrição.
+- Saída: XP sugerido entre 5 e 200.
+- MVP: modelo heurístico com suporte a provider LLM opcional.
+
+### 5.3 Níveis
+
+- Fórmula inicial sugerida:
+  - nível 1 inicia com 0 XP.
+  - XP para próximo nível = `100 * nivel_atual`.
+- Level-up gera evento no feed.
+
+### 5.4 Aprovação
+
+- Apenas criador da tarefa (ou owner/admin da lista) pode aprovar.
+- `approve` concede XP e marca tarefa como concluída.
+- `reject` retorna tarefa para estado `in_progress` ou `open`.
+
+### 5.5 Auditoria
+
+- Toda mutação relevante gera evento de atividade registrado com timestamp, usuário e detalhes (ex.: "Fulano concluiu tarefa X").
+- Ganhos e gastos de xp e energia devem ser lançados em ledger imutável.
+
+## 6. Personas (resumo)
+
+- **Paula, mãe (39):** quer distribuir tarefas domésticas e validar execução.
+- **Leo, adolescente (14):** busca progresso visual e competição saudável.
+- **Rafa, roommate (27):** quer coordenação simples sem fricção.
+- **Ana, esposa (32):** valoriza colaboração e reconhecimento mútuo.
+- **Carlos, pai (45):** quer incentivar filhos a ajudarem mais em casa.
+- **Sofia, estudante (22):** busca gamificação para aumentar produtividade pessoal.
+- **Marcos, freelancer (30):** quer organizar tarefas pessoais e prazos com motivação extra.
