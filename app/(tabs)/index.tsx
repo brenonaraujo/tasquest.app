@@ -56,24 +56,24 @@ export default function FeedScreen() {
   });
 
   const {
-    data: dismissedData,
-    isLoading: isDismissedLoading,
-    refetch: refetchDismissed,
-    isRefetching: isDismissedRefetching,
-    fetchNextPage: fetchNextDismissed,
-    hasNextPage: hasNextDismissed,
-    isFetchingNextPage: isFetchingNextDismissed,
+    data: allWithDismissedData,
+    isLoading: isAllWithDismissedLoading,
+    refetch: refetchAllWithDismissed,
+    isRefetching: isAllWithDismissedRefetching,
+    fetchNextPage: fetchNextAllWithDismissed,
+    hasNextPage: hasNextAllWithDismissed,
+    isFetchingNextPage: isFetchingNextAllWithDismissed,
   } = useInfiniteQuery<FeedResponse>({
-    queryKey: ["/api/v1/feed", { dismissed: true }],
+    queryKey: ["/api/v1/feed", { includeDismissed: 1 }],
     queryFn: async ({ pageParam }) => {
       const url = pageParam
-        ? `/api/v1/feed?dismissed=true&cursor=${pageParam}`
-        : "/api/v1/feed?dismissed=true";
+        ? `/api/v1/feed?includeDismissed=1&cursor=${pageParam}`
+        : "/api/v1/feed?includeDismissed=1";
       const token = getAuthToken();
       const headers: Record<string, string> = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
       const res = await fetch(new URL(url, getApiUrl()).toString(), { headers });
-      if (!res.ok) throw new Error("Failed to fetch dismissed feed");
+      if (!res.ok) throw new Error("Failed to fetch feed with dismissed");
       return res.json();
     },
     initialPageParam: undefined as string | undefined,
@@ -107,12 +107,13 @@ export default function FeedScreen() {
 
   const onRefresh = useCallback(() => {
     if (activeFilter === "hidden") {
-      refetchDismissed();
+      refetchAllWithDismissed();
+      refetch();
     } else {
       refetch();
     }
     queryClient.invalidateQueries({ queryKey: ["/api/v1/auth/me"] });
-  }, [refetch, refetchDismissed, activeFilter]);
+  }, [refetch, refetchAllWithDismissed, activeFilter]);
 
   const handleDismiss = useCallback((id: string) => {
     dismissMutation.mutate(id);
@@ -135,8 +136,10 @@ export default function FeedScreen() {
   }, [allFeedItems, user?.id]);
 
   const dismissedItems = useMemo(() => {
-    return dismissedData?.pages?.flatMap((page) => page.data) || [];
-  }, [dismissedData]);
+    const regularIds = new Set(allFeedItems.map((i) => i.id));
+    const allWithDismissed = allWithDismissedData?.pages?.flatMap((page) => page.data) || [];
+    return allWithDismissed.filter((item) => !regularIds.has(item.id));
+  }, [allFeedItems, allWithDismissedData]);
 
   const filteredItems = useMemo(() => {
     if (activeFilter === "hidden") {
@@ -156,11 +159,11 @@ export default function FeedScreen() {
 
   const handleEndReached = useCallback(() => {
     if (activeFilter === "hidden") {
-      if (hasNextDismissed && !isFetchingNextDismissed) fetchNextDismissed();
+      if (hasNextAllWithDismissed && !isFetchingNextAllWithDismissed) fetchNextAllWithDismissed();
     } else {
       if (hasNextPage && !isFetchingNextPage) fetchNextPage();
     }
-  }, [activeFilter, hasNextPage, isFetchingNextPage, fetchNextPage, hasNextDismissed, isFetchingNextDismissed, fetchNextDismissed]);
+  }, [activeFilter, hasNextPage, isFetchingNextPage, fetchNextPage, hasNextAllWithDismissed, isFetchingNextAllWithDismissed, fetchNextAllWithDismissed]);
 
   if (authLoading) {
     return (
@@ -173,9 +176,9 @@ export default function FeedScreen() {
   if (!isAuthenticated) return null;
 
   const showingHidden = activeFilter === "hidden";
-  const currentlyLoading = showingHidden ? isDismissedLoading : isLoading;
-  const currentlyRefreshing = showingHidden ? isDismissedRefetching : isRefetching;
-  const currentlyFetchingNext = showingHidden ? isFetchingNextDismissed : isFetchingNextPage;
+  const currentlyLoading = showingHidden ? isAllWithDismissedLoading : isLoading;
+  const currentlyRefreshing = showingHidden ? isAllWithDismissedRefetching : isRefetching;
+  const currentlyFetchingNext = showingHidden ? isFetchingNextAllWithDismissed : isFetchingNextPage;
 
   return (
     <View style={styles.container}>
