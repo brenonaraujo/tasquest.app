@@ -29,7 +29,7 @@ function NativeTabLayout() {
         <Icon sf={{ default: "house", selected: "house.fill" }} />
         <Label>Feed</Label>
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="lists">
+      <NativeTabs.Trigger name="(lists)">
         <Icon sf={{ default: "list.bullet.rectangle", selected: "list.bullet.rectangle.fill" }} />
         <Label>Lists</Label>
       </NativeTabs.Trigger>
@@ -88,7 +88,7 @@ function ClassicTabLayout() {
         }}
       />
       <Tabs.Screen
-        name="lists"
+        name="(lists)"
         options={{
           title: "Lists",
           tabBarIcon: ({ color, focused }) => (

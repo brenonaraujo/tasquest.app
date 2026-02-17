@@ -48,7 +48,6 @@ export default function ListsScreen() {
           paddingHorizontal: 16,
           paddingBottom: 100,
         }}
-        contentInsetAdjustmentBehavior="automatic"
         ListHeaderComponent={
           <View style={styles.header}>
             <Text style={styles.title}>My Lists</Text>
@@ -95,7 +94,7 @@ function ListCard({ list }: { list: TaskList }) {
   return (
     <Pressable
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
-      onPress={() => router.push({ pathname: "/list/[id]", params: { id: list.id } })}
+      onPress={() => router.push({ pathname: "/(lists)/[id]", params: { id: list.id } })}
     >
       <View style={[styles.listIcon, { backgroundColor: list.isShared ? Colors.secondary + "20" : Colors.primary + "20" }]}>
         <Ionicons
