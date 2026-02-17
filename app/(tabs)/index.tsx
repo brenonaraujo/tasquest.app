@@ -12,9 +12,10 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
+import Animated, { FadeIn, FadeOut, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import Colors from "@/constants/colors";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest, queryClient, getApiUrl, getAuthToken } from "@/lib/query-client";
@@ -39,6 +40,7 @@ export default function FeedScreen() {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const [activeFilter, setActiveFilter] = useState<FeedFilter>("all");
+  const [activeTasksCollapsed, setActiveTasksCollapsed] = useState(false);
 
   const {
     data,
@@ -64,7 +66,7 @@ export default function FeedScreen() {
     hasNextPage: hasNextAllWithDismissed,
     isFetchingNextPage: isFetchingNextAllWithDismissed,
   } = useInfiniteQuery<FeedResponse>({
-    queryKey: ["/api/v1/feed", { includeDismissed: 1 }],
+    queryKey: ["/api/v1/feed", "withDismissed"],
     queryFn: async ({ pageParam }) => {
       const url = pageParam
         ? `/api/v1/feed?includeDismissed=1&cursor=${pageParam}`
@@ -90,9 +92,9 @@ export default function FeedScreen() {
     },
   });
 
-  const undismissMutation = useMutation({
+  const restoreMutation = useMutation({
     mutationFn: async (feedItemId: string) => {
-      await apiRequest("DELETE", `/api/v1/feed/${feedItemId}/dismiss`);
+      await apiRequest("POST", `/api/v1/feed/${feedItemId}/restore`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/v1/feed"] });
@@ -106,11 +108,9 @@ export default function FeedScreen() {
   }, [authLoading, isAuthenticated]);
 
   const onRefresh = useCallback(() => {
+    refetch();
     if (activeFilter === "hidden") {
       refetchAllWithDismissed();
-      refetch();
-    } else {
-      refetch();
     }
     queryClient.invalidateQueries({ queryKey: ["/api/v1/auth/me"] });
   }, [refetch, refetchAllWithDismissed, activeFilter]);
@@ -119,9 +119,9 @@ export default function FeedScreen() {
     dismissMutation.mutate(id);
   }, [dismissMutation]);
 
-  const handleUndismiss = useCallback((id: string) => {
-    undismissMutation.mutate(id);
-  }, [undismissMutation]);
+  const handleRestore = useCallback((id: string) => {
+    restoreMutation.mutate(id);
+  }, [restoreMutation]);
 
   const allFeedItems = useMemo(() => {
     return data?.pages?.flatMap((page) => page.data) || [];
@@ -176,8 +176,8 @@ export default function FeedScreen() {
   if (!isAuthenticated) return null;
 
   const showingHidden = activeFilter === "hidden";
-  const currentlyLoading = showingHidden ? isAllWithDismissedLoading : isLoading;
-  const currentlyRefreshing = showingHidden ? isAllWithDismissedRefetching : isRefetching;
+  const currentlyLoading = showingHidden ? (isAllWithDismissedLoading || isLoading) : isLoading;
+  const currentlyRefreshing = showingHidden ? (isAllWithDismissedRefetching || isRefetching) : isRefetching;
   const currentlyFetchingNext = showingHidden ? isFetchingNextAllWithDismissed : isFetchingNextPage;
 
   return (
@@ -211,18 +211,33 @@ export default function FeedScreen() {
 
             {!showingHidden && myActiveItems.length > 0 ? (
               <View style={styles.activeSection}>
-                <View style={styles.activeSectionHeader}>
+                <Pressable
+                  style={styles.activeSectionHeader}
+                  onPress={() => {
+                    setActiveTasksCollapsed((c) => !c);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
+                >
                   <Ionicons name="flash" size={16} color={Colors.statusInProgress} />
                   <Text style={styles.activeSectionTitle}>Your Active Tasks</Text>
                   <View style={styles.activeBadge}>
                     <Text style={styles.activeBadgeText}>{myActiveItems.length}</Text>
                   </View>
-                </View>
-                {myActiveItems.map((item, index) => (
-                  <View key={item.id} style={index > 0 ? { marginTop: 10 } : undefined}>
-                    <FeedItemCard item={item} />
+                  <Ionicons
+                    name={activeTasksCollapsed ? "chevron-down" : "chevron-up"}
+                    size={16}
+                    color={Colors.statusInProgress}
+                  />
+                </Pressable>
+                {!activeTasksCollapsed ? (
+                  <View>
+                    {myActiveItems.map((item, index) => (
+                      <View key={item.id} style={index > 0 ? { marginTop: 10 } : undefined}>
+                        <FeedItemCard item={item} />
+                      </View>
+                    ))}
                   </View>
-                ))}
+                ) : null}
               </View>
             ) : null}
 
@@ -264,7 +279,7 @@ export default function FeedScreen() {
           <FeedItemCard
             item={item}
             onDismiss={showingHidden ? undefined : handleDismiss}
-            onUndismiss={showingHidden ? handleUndismiss : undefined}
+            onRestore={showingHidden ? handleRestore : undefined}
           />
         )}
         ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
@@ -357,7 +372,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginBottom: 12,
   },
   activeSectionTitle: {
     fontSize: 15,

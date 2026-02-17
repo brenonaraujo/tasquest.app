@@ -26,20 +26,20 @@ const ACTIVE_TASK_STATUSES = new Set(["in_progress", "pending_approval"]);
 interface FeedItemCardProps {
   item: FeedItem;
   onDismiss?: (id: string) => void;
-  onUndismiss?: (id: string) => void;
+  onRestore?: (id: string) => void;
 }
 
-export default function FeedItemCard({ item, onDismiss, onUndismiss }: FeedItemCardProps) {
+export default function FeedItemCard({ item, onDismiss, onRestore }: FeedItemCardProps) {
   const isActiveType = ACTIVE_TASK_TYPES.has(item.type);
 
   if (isActiveType && item.taskId) {
-    return <ActiveTaskFeedCard item={item} onDismiss={onDismiss} onUndismiss={onUndismiss} />;
+    return <ActiveTaskFeedCard item={item} />;
   }
 
-  return <StandardFeedCard item={item} onDismiss={onDismiss} onUndismiss={onUndismiss} />;
+  return <StandardFeedCard item={item} onDismiss={onDismiss} onRestore={onRestore} />;
 }
 
-function ActiveTaskFeedCard({ item, onDismiss, onUndismiss }: FeedItemCardProps) {
+function ActiveTaskFeedCard({ item }: { item: FeedItem }) {
   const payload = item.payload || {};
   const actorName = (payload.actorName as string) || "Someone";
   const timeAgo = formatDistanceToNow(new Date(item.createdAt), { addSuffix: true });
@@ -59,7 +59,7 @@ function ActiveTaskFeedCard({ item, onDismiss, onUndismiss }: FeedItemCardProps)
   }
 
   if (!task) {
-    return <StandardFeedCard item={item} onDismiss={onDismiss} onUndismiss={onUndismiss} />;
+    return <StandardFeedCard item={item} />;
   }
 
   if (!ACTIVE_TASK_STATUSES.has(task.status)) {
@@ -83,7 +83,7 @@ function ActiveTaskFeedCard({ item, onDismiss, onUndismiss }: FeedItemCardProps)
   );
 }
 
-function StandardFeedCard({ item, onDismiss, onUndismiss }: FeedItemCardProps) {
+function StandardFeedCard({ item, onDismiss, onRestore }: FeedItemCardProps) {
   const config = FEED_CONFIG[item.type] || { icon: "ellipsis-horizontal-circle", color: Colors.textMuted, verb: item.type };
   const payload = item.payload || {};
   const actorName = (payload.actorName as string) || "Someone";
@@ -144,16 +144,16 @@ function StandardFeedCard({ item, onDismiss, onUndismiss }: FeedItemCardProps) {
           ) : null}
         </View>
       </View>
-      {onUndismiss ? (
+      {onRestore ? (
         <Pressable
           onPress={() => {
-            onUndismiss(item.id);
+            onRestore(item.id);
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           }}
           hitSlop={10}
-          style={({ pressed }) => [styles.hideBtn, pressed && { opacity: 0.5 }]}
+          style={({ pressed }) => [styles.restoreBtn, pressed && { opacity: 0.5 }]}
         >
-          <Ionicons name="eye-outline" size={16} color={Colors.primary} />
+          <Ionicons name="eye-outline" size={18} color={Colors.primary} />
         </Pressable>
       ) : onDismiss ? (
         <Pressable
@@ -201,6 +201,7 @@ const styles = StyleSheet.create({
   },
   xpVal: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.xp },
   hideBtn: { padding: 4, marginTop: 2 },
+  restoreBtn: { padding: 4, marginTop: 2 },
 
   loadingCard: {
     backgroundColor: Colors.surface,
