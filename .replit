@@ -73,4 +73,4 @@ ensurePreviewReachable = "/status"
 [userenv]
 
 [userenv.shared]
-TASKQUEST_API_URL = "http://localhost:3000"
+TASKQUEST_API_URL = "https://api.brenon.cloud/taskquest"
