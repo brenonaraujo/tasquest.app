@@ -139,7 +139,7 @@ export default function TaskDetailScreen() {
   const statusCfg = STATUS_CONFIG[task.status] || STATUS_CONFIG.open;
   const isAssignedToMe = task.assigneeUserId === user?.id;
   const isCreator = task.creatorUserId === user?.id;
-  const canStart = task.status === "open" && isAssignedToMe;
+  const canStart = task.status === "open";
   const canComplete = task.status === "in_progress" && isAssignedToMe;
   const canApprove = task.status === "pending_approval" && isCreator;
 

@@ -18,6 +18,14 @@ const FEED_CONFIG: Record<string, { icon: keyof typeof Ionicons.glyphMap; color:
   reminder_due_today: { icon: "alarm", color: Colors.warning, verb: "due today" },
 };
 
+const STATUS_CONFIG: Record<string, { color: string; icon: keyof typeof Ionicons.glyphMap; label: string }> = {
+  open: { color: Colors.statusOpen, icon: "radio-button-off", label: "Open" },
+  in_progress: { color: Colors.statusInProgress, icon: "play-circle", label: "In Progress" },
+  pending_approval: { color: Colors.statusPendingApproval, icon: "time", label: "Pending" },
+  completed: { color: Colors.statusCompleted, icon: "checkmark-circle", label: "Done" },
+  cancelled: { color: Colors.statusCancelled, icon: "close-circle", label: "Cancelled" },
+};
+
 interface FeedItemCardProps {
   item: FeedItem;
   onDismiss?: (id: string) => void;
@@ -28,15 +36,18 @@ export default function FeedItemCard({ item, onDismiss }: FeedItemCardProps) {
   const payload = item.payload || {};
   const actorName = (payload.actorName as string) || "Someone";
   const taskTitle = (payload.taskTitle as string) || (payload.title as string) || "";
+  const taskDescription = (payload.taskDescription as string) || (payload.description as string) || "";
   const xpGained = payload.xpGained as number | undefined;
   const rewardXp = payload.rewardXp as number | undefined;
   const newLevel = payload.newLevel as number | undefined;
   const dueAt = payload.dueAt as string | undefined;
+  const needsApproval = payload.needsApproval as boolean | undefined;
+  const taskStatus = (payload.taskStatus as string) || (item.type === "task_started" ? "in_progress" : "open");
   const timeAgo = formatDistanceToNow(new Date(item.createdAt), { addSuffix: true });
   const isInProgress = item.type === "task_started";
 
   const dueDate = dueAt ? new Date(dueAt) : null;
-  const isOverdue = dueDate && isPast(dueDate);
+  const isOverdue = dueDate && isPast(dueDate) && taskStatus !== "completed";
   const isDueToday = dueDate && isToday(dueDate);
 
   function handlePress() {
@@ -46,59 +57,71 @@ export default function FeedItemCard({ item, onDismiss }: FeedItemCardProps) {
   }
 
   if (isInProgress) {
+    const statusCfg = STATUS_CONFIG[taskStatus] || STATUS_CONFIG.in_progress;
+    const xpValue = rewardXp || xpGained || 0;
+
     return (
       <Pressable
-        style={({ pressed }) => [styles.taskCard, pressed && styles.pressed]}
+        style={({ pressed }) => [styles.taskCard, pressed && styles.taskCardPressed]}
         onPress={handlePress}
       >
-        <View style={styles.taskCardTop}>
-          <View style={styles.taskCardRow}>
-            <View style={[styles.statusDot, { backgroundColor: Colors.statusInProgress }]} />
-            <View style={styles.taskCardContent}>
-              <Text style={styles.taskCardTitle} numberOfLines={2}>{taskTitle}</Text>
-              <Text style={styles.taskCardActor}>
-                <Text style={styles.actor}>{actorName}</Text> {config.verb}
-              </Text>
-            </View>
-            {(rewardXp || xpGained) ? (
-              <View style={styles.xpBadge}>
-                <Ionicons name="diamond" size={12} color={Colors.xp} />
-                <Text style={styles.xpBadgeText}>{rewardXp || xpGained}</Text>
-              </View>
+        <View style={styles.taskRow}>
+          <View style={[styles.statusDot, { backgroundColor: statusCfg.color }]} />
+          <View style={styles.taskContent}>
+            <Text style={styles.taskTitle} numberOfLines={2}>{taskTitle}</Text>
+            {taskDescription ? (
+              <Text style={styles.taskDescription} numberOfLines={1}>{taskDescription}</Text>
             ) : null}
           </View>
+          {xpValue > 0 ? (
+            <View style={styles.xpBadge}>
+              <Ionicons name="diamond" size={12} color={Colors.xp} />
+              <Text style={styles.xpBadgeText}>{xpValue}</Text>
+            </View>
+          ) : null}
         </View>
 
-        <View style={styles.taskCardFooter}>
-          <View style={styles.taskCardTags}>
-            <View style={[styles.statusTag, { backgroundColor: Colors.statusInProgress + "20" }]}>
-              <Ionicons name="flash" size={10} color={Colors.statusInProgress} />
-              <Text style={[styles.tagText, { color: Colors.statusInProgress }]}>Active</Text>
+        <View style={styles.taskFooter}>
+          <View style={styles.taskTags}>
+            <View style={[styles.statusTag, { backgroundColor: statusCfg.color + "20" }]}>
+              <Ionicons name={statusCfg.icon} size={10} color={statusCfg.color} />
+              <Text style={[styles.tagText, { color: statusCfg.color }]}>{statusCfg.label}</Text>
             </View>
-            {dueDate ? (
-              <View style={[styles.statusTag, { backgroundColor: (isOverdue ? Colors.danger : isDueToday ? Colors.accent : Colors.textMuted) + "20" }]}>
-                <Ionicons name="calendar-outline" size={10} color={isOverdue ? Colors.danger : isDueToday ? Colors.accent : Colors.textSecondary} />
-                <Text style={[styles.tagText, { color: isOverdue ? Colors.danger : isDueToday ? Colors.accent : Colors.textSecondary }]}>
-                  {isOverdue ? "Overdue" : isDueToday ? "Today" : format(dueDate, "MMM d")}
-                </Text>
+            {needsApproval ? (
+              <View style={[styles.statusTag, { backgroundColor: Colors.secondary + "20" }]}>
+                <Ionicons name="shield-checkmark" size={10} color={Colors.secondary} />
+                <Text style={[styles.tagText, { color: Colors.secondary }]}>Approval</Text>
               </View>
             ) : null}
           </View>
-          <View style={styles.taskCardMeta}>
+          {dueDate ? (
+            <Text style={[styles.dueText, isOverdue && styles.overdue, isDueToday && styles.dueToday]}>
+              {isOverdue ? "Overdue" : isDueToday ? "Today" : format(dueDate, "MMM d")}
+            </Text>
+          ) : null}
+        </View>
+
+        <View style={styles.taskMeta}>
+          <View style={styles.taskMetaLeft}>
+            <View style={styles.avatarSmall}>
+              <Text style={styles.avatarText}>{actorName.charAt(0)}</Text>
+            </View>
+            <Text style={styles.actorSmall}>{actorName}</Text>
+            <Text style={styles.dotSep}>·</Text>
             <Text style={styles.time}>{timeAgo}</Text>
-            {onDismiss ? (
-              <Pressable
-                onPress={() => {
-                  onDismiss(item.id);
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                }}
-                hitSlop={10}
-                style={({ pressed }) => [pressed && { opacity: 0.5 }]}
-              >
-                <Ionicons name="eye-off-outline" size={14} color={Colors.textMuted} />
-              </Pressable>
-            ) : null}
           </View>
+          {onDismiss ? (
+            <Pressable
+              onPress={() => {
+                onDismiss(item.id);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+              hitSlop={10}
+              style={({ pressed }) => [pressed && { opacity: 0.5 }]}
+            >
+              <Ionicons name="eye-off-outline" size={14} color={Colors.textMuted} />
+            </Pressable>
+          ) : null}
         </View>
       </Pressable>
     );
@@ -193,16 +216,14 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: Colors.statusInProgress + "50",
-    borderLeftWidth: 3,
-    borderLeftColor: Colors.statusInProgress,
+    borderColor: Colors.cardBorder,
   },
-  taskCardTop: { marginBottom: 10 },
-  taskCardRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  taskCardPressed: { opacity: 0.8, transform: [{ scale: 0.98 }] },
+  taskRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   statusDot: { width: 8, height: 8, borderRadius: 4, marginTop: 6 },
-  taskCardContent: { flex: 1, gap: 2 },
-  taskCardTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  taskCardActor: { fontSize: 12, color: Colors.textSecondary, fontFamily: "Inter_400Regular" },
+  taskContent: { flex: 1, gap: 2 },
+  taskTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  taskDescription: { fontSize: 13, color: Colors.textSecondary, fontFamily: "Inter_400Regular" },
   xpBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -213,8 +234,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   xpBadgeText: { fontSize: 12, fontFamily: "Inter_700Bold", color: Colors.xp },
-  taskCardFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  taskCardTags: { flexDirection: "row", gap: 6, flexWrap: "wrap", flex: 1 },
+  taskFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 10 },
+  taskTags: { flexDirection: "row", gap: 6, flexWrap: "wrap", flex: 1 },
   statusTag: {
     flexDirection: "row",
     alignItems: "center",
@@ -224,5 +245,28 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   tagText: { fontSize: 10, fontFamily: "Inter_500Medium" },
-  taskCardMeta: { flexDirection: "row", alignItems: "center", gap: 8 },
+  dueText: { fontSize: 11, color: Colors.textSecondary, fontFamily: "Inter_500Medium" },
+  overdue: { color: Colors.danger },
+  dueToday: { color: Colors.accent },
+  taskMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: Colors.cardBorder,
+  },
+  taskMetaLeft: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1 },
+  avatarSmall: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: Colors.primary + "30",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: { fontSize: 9, fontFamily: "Inter_700Bold", color: Colors.primary },
+  actorSmall: { fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  dotSep: { fontSize: 11, color: Colors.textMuted },
 });

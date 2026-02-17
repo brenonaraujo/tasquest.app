@@ -80,8 +80,17 @@ export default function FeedScreen() {
     return data?.pages?.flatMap((page) => page.data) || [];
   }, [data]);
 
+  const myActiveItems = useMemo(() => {
+    return allFeedItems.filter(
+      (item) =>
+        item.type === "task_started" &&
+        (item.actorUserId === user?.id || item.targetUserId === user?.id)
+    );
+  }, [allFeedItems, user?.id]);
+
   const filteredItems = useMemo(() => {
-    let items = allFeedItems;
+    const myActiveIds = new Set(myActiveItems.map((i) => i.id));
+    let items = allFeedItems.filter((i) => !myActiveIds.has(i.id));
     if (activeFilter === "mine") {
       items = items.filter((item) => item.actorUserId === user?.id);
     } else if (activeFilter === "in_progress") {
@@ -89,10 +98,8 @@ export default function FeedScreen() {
     } else if (activeFilter === "general") {
       items = items.filter((item) => item.actorUserId !== user?.id);
     }
-    const inProgress = items.filter((i) => i.type === "task_started");
-    const rest = items.filter((i) => i.type !== "task_started");
-    return [...inProgress, ...rest];
-  }, [allFeedItems, activeFilter, user?.id]);
+    return items;
+  }, [allFeedItems, activeFilter, user?.id, myActiveItems]);
 
   const handleEndReached = useCallback(() => {
     if (hasNextPage && !isFetchingNextPage) {
@@ -138,6 +145,24 @@ export default function FeedScreen() {
                 />
               </View>
             ) : null}
+
+            {myActiveItems.length > 0 ? (
+              <View style={styles.activeSection}>
+                <View style={styles.activeSectionHeader}>
+                  <Ionicons name="flash" size={16} color={Colors.statusInProgress} />
+                  <Text style={styles.activeSectionTitle}>Your Active Tasks</Text>
+                  <View style={styles.activeBadge}>
+                    <Text style={styles.activeBadgeText}>{myActiveItems.length}</Text>
+                  </View>
+                </View>
+                {myActiveItems.map((item, index) => (
+                  <View key={item.id} style={index > 0 ? { marginTop: 10 } : undefined}>
+                    <FeedItemCard item={item} onDismiss={handleDismiss} />
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
             <View style={styles.sectionRow}>
               <Text style={styles.sectionTitle}>Activity</Text>
             </View>
@@ -238,6 +263,37 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.cardBorder,
     marginBottom: 20,
+  },
+  activeSection: {
+    backgroundColor: Colors.statusInProgress + "08",
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: Colors.statusInProgress + "25",
+    marginBottom: 20,
+  },
+  activeSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 12,
+  },
+  activeSectionTitle: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+    color: Colors.statusInProgress,
+    flex: 1,
+  },
+  activeBadge: {
+    backgroundColor: Colors.statusInProgress + "20",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  activeBadgeText: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+    color: Colors.statusInProgress,
   },
   sectionRow: {
     flexDirection: "row",
