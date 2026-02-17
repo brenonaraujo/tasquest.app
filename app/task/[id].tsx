@@ -37,6 +37,8 @@ export default function TaskDetailScreen() {
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
   const [commentText, setCommentText] = useState("");
+  const [togglingSubtasks, setTogglingSubtasks] = useState<Set<string>>(new Set());
+  const [votingComments, setVotingComments] = useState<Set<string>>(new Set());
 
   const {
     data: taskData,
@@ -94,15 +96,32 @@ export default function TaskDetailScreen() {
   });
 
   const voteMutation = useMutation({
-    mutationFn: ({ commentId, value }: { commentId: string; value: -1 | 0 | 1 }) =>
-      apiRequest("POST", `/api/v1/comments/${commentId}/vote`, { value } as VoteTaskCommentRequest),
-    onSuccess: () => refetchComments(),
+    mutationFn: async ({ commentId, value }: { commentId: string; value: -1 | 0 | 1 }) => {
+      setVotingComments((prev) => new Set(prev).add(commentId));
+      return apiRequest("POST", `/api/v1/comments/${commentId}/vote`, { value } as VoteTaskCommentRequest);
+    },
+    onSuccess: (_data, { commentId }) => {
+      setVotingComments((prev) => { const n = new Set(prev); n.delete(commentId); return n; });
+      refetchComments();
+    },
+    onError: (_err, { commentId }) => {
+      setVotingComments((prev) => { const n = new Set(prev); n.delete(commentId); return n; });
+    },
   });
 
   const subtaskMutation = useMutation({
-    mutationFn: ({ subtaskId, isDone }: { subtaskId: string; isDone: boolean }) =>
-      apiRequest("PATCH", `/api/v1/subtasks/${subtaskId}`, { isDone }),
-    onSuccess: () => { refetch(); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); },
+    mutationFn: async ({ subtaskId, isDone }: { subtaskId: string; isDone: boolean }) => {
+      setTogglingSubtasks((prev) => new Set(prev).add(subtaskId));
+      return apiRequest("PATCH", `/api/v1/subtasks/${subtaskId}`, { isDone });
+    },
+    onSuccess: (_data, { subtaskId }) => {
+      setTogglingSubtasks((prev) => { const n = new Set(prev); n.delete(subtaskId); return n; });
+      refetch();
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    },
+    onError: (_err, { subtaskId }) => {
+      setTogglingSubtasks((prev) => { const n = new Set(prev); n.delete(subtaskId); return n; });
+    },
   });
 
   function handleReject() {
@@ -208,27 +227,35 @@ export default function TaskDetailScreen() {
               <Text style={styles.sectionTitle}>
                 Subtasks ({task.subtasks.filter((s) => s.isDone).length}/{task.subtasks.length})
               </Text>
-              {task.subtasks.map((sub) => (
-                <Pressable
-                  key={sub.id}
-                  style={styles.subtaskRow}
-                  onPress={() => subtaskMutation.mutate({ subtaskId: sub.id, isDone: !sub.isDone })}
-                >
-                  <Ionicons
-                    name={sub.isDone ? "checkbox" : "square-outline"}
-                    size={20}
-                    color={sub.isDone ? Colors.success : Colors.textMuted}
-                  />
-                  <Text style={[styles.subtaskText, sub.isDone && styles.subtaskDone]}>{sub.title}</Text>
-                </Pressable>
-              ))}
+              {task.subtasks.map((sub) => {
+                const isToggling = togglingSubtasks.has(sub.id);
+                return (
+                  <Pressable
+                    key={sub.id}
+                    style={styles.subtaskRow}
+                    onPress={() => subtaskMutation.mutate({ subtaskId: sub.id, isDone: !sub.isDone })}
+                    disabled={isToggling}
+                  >
+                    {isToggling ? (
+                      <ActivityIndicator size={18} color={Colors.primary} />
+                    ) : (
+                      <Ionicons
+                        name={sub.isDone ? "checkbox" : "square-outline"}
+                        size={20}
+                        color={sub.isDone ? Colors.success : Colors.textMuted}
+                      />
+                    )}
+                    <Text style={[styles.subtaskText, sub.isDone && styles.subtaskDone]}>{sub.title}</Text>
+                  </Pressable>
+                );
+              })}
             </View>
           ) : null}
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Comments ({comments.length})</Text>
             {comments.map((c) => (
-              <CommentCard key={c.id} comment={c} onVote={(val) => voteMutation.mutate({ commentId: c.id, value: val })} />
+              <CommentCard key={c.id} comment={c} onVote={(val) => voteMutation.mutate({ commentId: c.id, value: val })} isVoting={votingComments.has(c.id)} />
             ))}
             {comments.length === 0 ? (
               <Text style={styles.noComments}>No comments yet</Text>
@@ -251,11 +278,15 @@ export default function TaskDetailScreen() {
             }}
             disabled={!commentText.trim() || commentMutation.isPending}
           >
-            <Ionicons
-              name="send"
-              size={22}
-              color={commentText.trim() ? Colors.primary : Colors.textMuted}
-            />
+            {commentMutation.isPending ? (
+              <ActivityIndicator size={20} color={Colors.primary} />
+            ) : (
+              <Ionicons
+                name="send"
+                size={22}
+                color={commentText.trim() ? Colors.primary : Colors.textMuted}
+              />
+            )}
           </Pressable>
         </View>
       </View>
@@ -288,7 +319,7 @@ function ActionBtn({
   );
 }
 
-function CommentCard({ comment, onVote }: { comment: TaskComment; onVote: (v: -1 | 0 | 1) => void }) {
+function CommentCard({ comment, onVote, isVoting }: { comment: TaskComment; onVote: (v: -1 | 0 | 1) => void; isVoting?: boolean }) {
   return (
     <View style={styles.commentCard}>
       <View style={styles.commentHeader}>
@@ -299,12 +330,14 @@ function CommentCard({ comment, onVote }: { comment: TaskComment; onVote: (v: -1
           <Text style={styles.commentAuthor}>{comment.author.name}</Text>
           <Text style={styles.commentTime}>{format(new Date(comment.createdAt), "MMM d, h:mm a")}</Text>
         </View>
+        {isVoting ? <ActivityIndicator size={12} color={Colors.primary} /> : null}
       </View>
       <Text style={styles.commentContent}>{comment.content}</Text>
       <View style={styles.voteRow}>
         <Pressable
           style={[styles.voteBtn, comment.userVote === 1 && styles.voteBtnActive]}
           onPress={() => onVote(comment.userVote === 1 ? 0 : 1)}
+          disabled={!!isVoting}
         >
           <Ionicons name="thumbs-up" size={14} color={comment.userVote === 1 ? Colors.primary : Colors.textMuted} />
           <Text style={[styles.voteCount, comment.userVote === 1 && { color: Colors.primary }]}>{comment.likes}</Text>
@@ -312,6 +345,7 @@ function CommentCard({ comment, onVote }: { comment: TaskComment; onVote: (v: -1
         <Pressable
           style={[styles.voteBtn, comment.userVote === -1 && styles.voteBtnActive]}
           onPress={() => onVote(comment.userVote === -1 ? 0 : -1)}
+          disabled={!!isVoting}
         >
           <Ionicons name="thumbs-down" size={14} color={comment.userVote === -1 ? Colors.primaryDark : Colors.textMuted} />
           <Text style={[styles.voteCount, comment.userVote === -1 && { color: Colors.primaryDark }]}>{comment.dislikes}</Text>
