@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -13,36 +13,70 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
-import { apiRequest, queryClient, getApiUrl } from "@/lib/query-client";
-import { getAuthToken } from "@/lib/query-client";
+import { apiRequest, queryClient, getApiUrl, getAuthToken } from "@/lib/query-client";
 import { fetch } from "expo/fetch";
-import type { XPSuggestionResponse } from "@/lib/types";
+import { useAuth } from "@/lib/auth-context";
+import type { XPSuggestionResponse, TaskList, ListMember } from "@/lib/types";
 
 export default function CreateTaskScreen() {
-  const { listId } = useLocalSearchParams<{ listId: string }>();
+  const params = useLocalSearchParams<{ listId?: string }>();
+  const { isAuthenticated } = useAuth();
+  const [selectedListId, setSelectedListId] = useState(params.listId || "");
+  const [showListPicker, setShowListPicker] = useState(!params.listId);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [rewardXp, setRewardXp] = useState(10);
   const [needsApproval, setNeedsApproval] = useState(false);
+  const [assigneeUserId, setAssigneeUserId] = useState<string | null>(null);
+  const [showAssigneePicker, setShowAssigneePicker] = useState(false);
+  const [subtaskInputs, setSubtaskInputs] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiJustification, setAiJustification] = useState("");
 
+  const { data: listsData } = useQuery<{ data: TaskList[] }>({
+    queryKey: ["/api/v1/lists"],
+    enabled: isAuthenticated,
+  });
+
+  const { data: membersData } = useQuery<{ data: ListMember[] }>({
+    queryKey: [`/api/v1/lists/${selectedListId}/members`],
+    enabled: isAuthenticated && !!selectedListId,
+  });
+
+  const lists = listsData?.data || [];
+  const members = membersData?.data || [];
+  const selectedList = lists.find((l) => l.id === selectedListId);
+  const selectedAssignee = members.find((m) => m.userId === assigneeUserId);
+
+  useEffect(() => {
+    if (!selectedListId && lists.length === 1) {
+      setSelectedListId(lists[0].id);
+      setShowListPicker(false);
+    }
+  }, [lists, selectedListId]);
+
   const createMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest("POST", `/api/v1/lists/${listId}/tasks`, {
+      const res = await apiRequest("POST", `/api/v1/lists/${selectedListId}/tasks`, {
         title: title.trim(),
         description: description.trim() || null,
         rewardXp,
         needsApproval,
+        assigneeUserId: assigneeUserId || null,
       });
+      const task = await res.json();
+      const validSubtasks = subtaskInputs.filter((s) => s.trim());
+      for (const st of validSubtasks) {
+        await apiRequest("POST", `/api/v1/tasks/${task.id}/subtasks`, { title: st.trim() });
+      }
     },
     onSuccess: () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      queryClient.invalidateQueries({ queryKey: [`/api/v1/lists/${listId}/tasks`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/v1/lists/${selectedListId}/tasks`] });
       queryClient.invalidateQueries({ queryKey: ["/api/v1/feed"] });
       router.back();
     },
@@ -65,13 +99,11 @@ export default function CreateTaskScreen() {
       const token = getAuthToken();
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
-
       const res = await fetch(url.toString(), {
         method: "POST",
         headers,
         body: JSON.stringify({ title: title.trim(), description: description.trim() || undefined }),
       });
-
       if (res.ok) {
         const data = (await res.json()) as XPSuggestionResponse;
         setRewardXp(data.suggestedXp);
@@ -85,7 +117,25 @@ export default function CreateTaskScreen() {
     }
   }
 
+  function addSubtaskInput() {
+    setSubtaskInputs((prev) => [...prev, ""]);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }
+
+  function updateSubtask(index: number, text: string) {
+    setSubtaskInputs((prev) => prev.map((s, i) => (i === index ? text : s)));
+  }
+
+  function removeSubtask(index: number) {
+    setSubtaskInputs((prev) => prev.filter((_, i) => i !== index));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }
+
   function handleSubmit() {
+    if (!selectedListId) {
+      setError("Select a list first");
+      return;
+    }
     if (!title.trim()) {
       setError("Title is required");
       return;
@@ -112,7 +162,17 @@ export default function CreateTaskScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.sheetTitle}>New Task</Text>
+        <View style={styles.topRow}>
+          <Pressable
+            onPress={() => router.back()}
+            hitSlop={12}
+            style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.6 }]}
+          >
+            <Ionicons name="close" size={22} color={Colors.textSecondary} />
+          </Pressable>
+          <Text style={styles.sheetTitle}>New Task</Text>
+          <View style={{ width: 32 }} />
+        </View>
 
         {error ? (
           <View style={styles.errorBox}>
@@ -120,6 +180,67 @@ export default function CreateTaskScreen() {
             <Text style={styles.errorText}>{error}</Text>
           </View>
         ) : null}
+
+        <View style={styles.field}>
+          <Text style={styles.label}>List</Text>
+          {showListPicker ? (
+            <View style={styles.pickerContainer}>
+              {lists.length === 0 ? (
+                <Text style={styles.pickerEmpty}>No lists available. Create one first.</Text>
+              ) : (
+                lists.map((list) => (
+                  <Pressable
+                    key={list.id}
+                    style={({ pressed }) => [
+                      styles.pickerItem,
+                      selectedListId === list.id && styles.pickerItemActive,
+                      pressed && { opacity: 0.8 },
+                    ]}
+                    onPress={() => {
+                      setSelectedListId(list.id);
+                      setShowListPicker(false);
+                      setAssigneeUserId(null);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                  >
+                    <Ionicons
+                      name={list.isShared ? "people" : "list"}
+                      size={16}
+                      color={selectedListId === list.id ? Colors.primary : Colors.textMuted}
+                    />
+                    <Text
+                      style={[
+                        styles.pickerItemText,
+                        selectedListId === list.id && { color: Colors.primary },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {list.name}
+                    </Text>
+                    {selectedListId === list.id ? (
+                      <Ionicons name="checkmark" size={16} color={Colors.primary} />
+                    ) : null}
+                  </Pressable>
+                ))
+              )}
+            </View>
+          ) : (
+            <Pressable
+              style={({ pressed }) => [styles.selectedPill, pressed && { opacity: 0.8 }]}
+              onPress={() => setShowListPicker(true)}
+            >
+              <Ionicons
+                name={selectedList?.isShared ? "people" : "list"}
+                size={16}
+                color={Colors.primary}
+              />
+              <Text style={styles.selectedPillText} numberOfLines={1}>
+                {selectedList?.name || "Select list"}
+              </Text>
+              <Ionicons name="chevron-down" size={14} color={Colors.textMuted} />
+            </Pressable>
+          )}
+        </View>
 
         <View style={styles.field}>
           <Text style={styles.label}>Title</Text>
@@ -147,11 +268,102 @@ export default function CreateTaskScreen() {
           />
         </View>
 
+        {selectedListId && members.length > 0 ? (
+          <View style={styles.field}>
+            <Text style={styles.label}>Assign to</Text>
+            {showAssigneePicker ? (
+              <View style={styles.pickerContainer}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.pickerItem,
+                    !assigneeUserId && styles.pickerItemActive,
+                    pressed && { opacity: 0.8 },
+                  ]}
+                  onPress={() => {
+                    setAssigneeUserId(null);
+                    setShowAssigneePicker(false);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
+                >
+                  <Ionicons name="person-outline" size={16} color={Colors.textMuted} />
+                  <Text style={styles.pickerItemText}>Unassigned</Text>
+                </Pressable>
+                {members
+                  .filter((m) => m.status === "active")
+                  .map((member) => (
+                    <Pressable
+                      key={member.userId}
+                      style={({ pressed }) => [
+                        styles.pickerItem,
+                        assigneeUserId === member.userId && styles.pickerItemActive,
+                        pressed && { opacity: 0.8 },
+                      ]}
+                      onPress={() => {
+                        setAssigneeUserId(member.userId);
+                        setShowAssigneePicker(false);
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }}
+                    >
+                      <View style={styles.memberAvatar}>
+                        <Text style={styles.memberAvatarText}>
+                          {member.name.charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[
+                            styles.pickerItemText,
+                            assigneeUserId === member.userId && { color: Colors.primary },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {member.name}
+                        </Text>
+                        <Text style={styles.memberRole}>{member.role}</Text>
+                      </View>
+                      {assigneeUserId === member.userId ? (
+                        <Ionicons name="checkmark" size={16} color={Colors.primary} />
+                      ) : null}
+                    </Pressable>
+                  ))}
+              </View>
+            ) : (
+              <Pressable
+                style={({ pressed }) => [styles.selectedPill, pressed && { opacity: 0.8 }]}
+                onPress={() => setShowAssigneePicker(true)}
+              >
+                {selectedAssignee ? (
+                  <>
+                    <View style={styles.memberAvatar}>
+                      <Text style={styles.memberAvatarText}>
+                        {selectedAssignee.name.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                    <Text style={styles.selectedPillText}>{selectedAssignee.name}</Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="person-add-outline" size={16} color={Colors.textMuted} />
+                    <Text style={[styles.selectedPillText, { color: Colors.textMuted }]}>
+                      Tap to assign
+                    </Text>
+                  </>
+                )}
+                <Ionicons name="chevron-down" size={14} color={Colors.textMuted} />
+              </Pressable>
+            )}
+          </View>
+        ) : null}
+
         <View style={styles.field}>
           <View style={styles.xpHeader}>
             <Text style={styles.label}>XP Reward</Text>
             <Pressable
-              style={({ pressed }) => [styles.aiBtn, pressed && { opacity: 0.8 }, aiLoading && { opacity: 0.6 }]}
+              style={({ pressed }) => [
+                styles.aiBtn,
+                pressed && { opacity: 0.8, transform: [{ scale: 0.96 }] },
+                aiLoading && { opacity: 0.6 },
+              ]}
               onPress={suggestXP}
               disabled={aiLoading}
             >
@@ -196,6 +408,39 @@ export default function CreateTaskScreen() {
           ) : null}
         </View>
 
+        <View style={styles.field}>
+          <View style={styles.subtaskHeader}>
+            <Text style={styles.label}>Subtasks</Text>
+            <Pressable
+              style={({ pressed }) => [styles.addSubBtn, pressed && { opacity: 0.7 }]}
+              onPress={addSubtaskInput}
+            >
+              <Ionicons name="add" size={16} color={Colors.primary} />
+              <Text style={styles.addSubText}>Add</Text>
+            </Pressable>
+          </View>
+          {subtaskInputs.map((st, i) => (
+            <View key={i} style={styles.subtaskRow}>
+              <View style={styles.subtaskDot} />
+              <TextInput
+                style={styles.subtaskInput}
+                placeholder={`Subtask ${i + 1}`}
+                placeholderTextColor={Colors.textMuted}
+                value={st}
+                onChangeText={(t) => updateSubtask(i, t)}
+                maxLength={120}
+              />
+              <Pressable
+                onPress={() => removeSubtask(i)}
+                hitSlop={8}
+                style={({ pressed }) => [pressed && { opacity: 0.5 }]}
+              >
+                <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
+              </Pressable>
+            </View>
+          ))}
+        </View>
+
         <View style={styles.switchRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.switchLabel}>Requires Approval</Text>
@@ -213,7 +458,7 @@ export default function CreateTaskScreen() {
           style={({ pressed }) => [
             styles.submitBtn,
             createMutation.isPending && styles.submitDisabled,
-            pressed && { opacity: 0.9 },
+            pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
           ]}
           onPress={handleSubmit}
           disabled={createMutation.isPending}
@@ -236,7 +481,21 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   container: { flex: 1, backgroundColor: Colors.surface },
   scroll: { padding: 20, paddingBottom: 40 },
-  sheetTitle: { fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.text, marginBottom: 20, textAlign: "center" as const },
+  topRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 20,
+  },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.surfaceLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sheetTitle: { fontSize: 18, fontFamily: "Inter_700Bold", color: Colors.text },
   errorBox: {
     flexDirection: "row",
     alignItems: "center",
@@ -261,6 +520,73 @@ const styles = StyleSheet.create({
     borderColor: Colors.cardBorder,
   },
   textArea: { minHeight: 80, textAlignVertical: "top" as const },
+  pickerContainer: {
+    backgroundColor: Colors.surfaceLight,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+    overflow: "hidden",
+  },
+  pickerItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.cardBorder,
+  },
+  pickerItemActive: {
+    backgroundColor: Colors.primary + "10",
+  },
+  pickerItemText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+    color: Colors.text,
+  },
+  pickerEmpty: {
+    padding: 14,
+    fontSize: 13,
+    color: Colors.textMuted,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center" as const,
+  },
+  selectedPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: Colors.surfaceLight,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+  },
+  selectedPillText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+    color: Colors.text,
+  },
+  memberAvatar: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: Colors.primary + "25",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  memberAvatarText: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+    color: Colors.primary,
+  },
+  memberRole: {
+    fontSize: 10,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textMuted,
+  },
   xpHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
   aiBtn: {
     flexDirection: "row",
@@ -297,6 +623,46 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   aiReasonText: { fontSize: 12, color: Colors.secondary, fontFamily: "Inter_400Regular", flex: 1, lineHeight: 17 },
+  subtaskHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  addSubBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: Colors.primary + "15",
+  },
+  addSubText: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.primary },
+  subtaskRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  subtaskDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.textMuted,
+  },
+  subtaskInput: {
+    flex: 1,
+    backgroundColor: Colors.surfaceLight,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: Colors.text,
+    fontFamily: "Inter_400Regular",
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+  },
   switchRow: {
     flexDirection: "row",
     alignItems: "center",

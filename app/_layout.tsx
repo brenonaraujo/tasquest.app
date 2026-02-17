@@ -34,7 +34,7 @@ function RootLayoutNav() {
         name="create-task"
         options={{
           presentation: "formSheet",
-          sheetAllowedDetents: [0.85],
+          sheetAllowedDetents: [0.95],
           sheetGrabberVisible: true,
           headerShown: false,
           contentStyle: { backgroundColor: Colors.surface },

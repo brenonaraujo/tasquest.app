@@ -58,7 +58,17 @@ export default function CreateListScreen() {
       keyboardVerticalOffset={0}
     >
       <View style={styles.container}>
-        <Text style={styles.sheetTitle}>New List</Text>
+        <View style={styles.topRow}>
+          <Pressable
+            onPress={() => router.back()}
+            hitSlop={12}
+            style={({ pressed }) => [styles.closeBtn, pressed && { opacity: 0.6 }]}
+          >
+            <Ionicons name="close" size={22} color={Colors.textSecondary} />
+          </Pressable>
+          <Text style={styles.sheetTitle}>New List</Text>
+          <View style={{ width: 32 }} />
+        </View>
 
         {error ? (
           <View style={styles.errorBox}>
@@ -98,7 +108,7 @@ export default function CreateListScreen() {
           style={({ pressed }) => [
             styles.submitBtn,
             createMutation.isPending && styles.submitDisabled,
-            pressed && { opacity: 0.9 },
+            pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] },
           ]}
           onPress={handleSubmit}
           disabled={createMutation.isPending}
@@ -120,7 +130,21 @@ export default function CreateListScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   container: { flex: 1, backgroundColor: Colors.surface, padding: 20 },
-  sheetTitle: { fontSize: 22, fontFamily: "Inter_700Bold", color: Colors.text, marginBottom: 20, textAlign: "center" as const },
+  topRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 20,
+  },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.surfaceLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sheetTitle: { fontSize: 18, fontFamily: "Inter_700Bold", color: Colors.text },
   errorBox: {
     flexDirection: "row",
     alignItems: "center",

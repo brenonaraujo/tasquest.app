@@ -1,7 +1,7 @@
 const Colors = {
-  primary: "#10B981",
-  primaryDark: "#059669",
-  primaryLight: "#34D399",
+  primary: "#06B6D4",
+  primaryDark: "#0891B2",
+  primaryLight: "#22D3EE",
   secondary: "#8B5CF6",
   secondaryDark: "#7C3AED",
   secondaryLight: "#A78BFA",
@@ -29,15 +29,15 @@ const Colors = {
   statusPendingApproval: "#8B5CF6",
   statusCompleted: "#22C55E",
   statusCancelled: "#64748B",
-  xp: "#10B981",
+  xp: "#06B6D4",
   energy: "#F59E0B",
   level: "#8B5CF6",
   light: {
     text: "#F1F5F9",
     background: "#0F172A",
-    tint: "#10B981",
+    tint: "#06B6D4",
     tabIconDefault: "#64748B",
-    tabIconSelected: "#10B981",
+    tabIconSelected: "#06B6D4",
   },
 };
 
