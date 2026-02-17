@@ -1,0 +1,167 @@
+import { useCallback } from "react";
+import {
+  StyleSheet,
+  Text,
+  View,
+  FlatList,
+  RefreshControl,
+  ActivityIndicator,
+  Platform,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useQuery } from "@tanstack/react-query";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Colors from "@/constants/colors";
+import { useAuth } from "@/lib/auth-context";
+import type { LeaderboardResponse, LeaderboardEntry } from "@/lib/types";
+
+const RANK_COLORS = [Colors.accent, "#C0C0C0", "#CD7F32"];
+
+export default function LeaderboardScreen() {
+  const insets = useSafeAreaInsets();
+  const { isAuthenticated, user } = useAuth();
+  const topPad = Platform.OS === "web" ? 67 : insets.top;
+
+  const { data, isLoading, refetch, isRefetching } = useQuery<LeaderboardResponse>({
+    queryKey: ["/api/v1/gamification/leaderboard/global"],
+    enabled: isAuthenticated,
+  });
+
+  const onRefresh = useCallback(() => {
+    refetch();
+  }, [refetch]);
+
+  const entries = data?.data || [];
+
+  return (
+    <View style={styles.container}>
+      <FlatList
+        data={entries}
+        keyExtractor={(item) => item.userId}
+        contentContainerStyle={{
+          paddingTop: topPad + 12,
+          paddingHorizontal: 16,
+          paddingBottom: 100,
+        }}
+        contentInsetAdjustmentBehavior="automatic"
+        ListHeaderComponent={
+          <View style={styles.header}>
+            <Text style={styles.title}>Ranking</Text>
+            <Text style={styles.subtitle}>Top questers globally</Text>
+          </View>
+        }
+        renderItem={({ item, index }) => (
+          <LeaderboardRow entry={item} rank={index + 1} isMe={item.userId === user?.id} />
+        )}
+        ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+        ListEmptyComponent={
+          isLoading ? (
+            <View style={styles.centered}>
+              <ActivityIndicator color={Colors.primary} />
+            </View>
+          ) : (
+            <View style={styles.empty}>
+              <Ionicons name="trophy-outline" size={48} color={Colors.textMuted} />
+              <Text style={styles.emptyTitle}>No rankings yet</Text>
+              <Text style={styles.emptyText}>Complete tasks to earn XP and climb the leaderboard</Text>
+            </View>
+          )
+        }
+        refreshControl={
+          <RefreshControl refreshing={isRefetching} onRefresh={onRefresh} tintColor={Colors.primary} />
+        }
+        showsVerticalScrollIndicator={false}
+      />
+    </View>
+  );
+}
+
+function LeaderboardRow({ entry, rank, isMe }: { entry: LeaderboardEntry; rank: number; isMe: boolean }) {
+  const isTop3 = rank <= 3;
+  const rankColor = isTop3 ? RANK_COLORS[rank - 1] : Colors.textMuted;
+
+  return (
+    <View style={[styles.row, isMe && styles.rowMe]}>
+      <View style={[styles.rankBadge, isTop3 && { backgroundColor: rankColor + "20" }]}>
+        {isTop3 ? (
+          <Ionicons name="trophy" size={16} color={rankColor} />
+        ) : (
+          <Text style={styles.rankNum}>{rank}</Text>
+        )}
+      </View>
+
+      <View style={styles.avatar}>
+        <Text style={styles.avatarText}>{entry.name.charAt(0).toUpperCase()}</Text>
+      </View>
+
+      <View style={styles.info}>
+        <Text style={[styles.name, isMe && styles.nameMe]} numberOfLines={1}>
+          {entry.name} {isMe ? "(You)" : ""}
+        </Text>
+        <View style={styles.stats}>
+          <View style={styles.stat}>
+            <Ionicons name="star" size={10} color={Colors.level} />
+            <Text style={styles.statText}>Lv.{entry.level}</Text>
+          </View>
+          <View style={styles.stat}>
+            <Ionicons name="checkmark-circle" size={10} color={Colors.success} />
+            <Text style={styles.statText}>{entry.completedTasks}</Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.xpCol}>
+        <Ionicons name="diamond" size={14} color={Colors.xp} />
+        <Text style={styles.xpValue}>{entry.totalXp}</Text>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: Colors.background },
+  centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: 40 },
+  header: { marginBottom: 20 },
+  title: { fontSize: 26, fontFamily: "Inter_700Bold", color: Colors.text },
+  subtitle: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 2 },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+    gap: 10,
+  },
+  rowMe: { borderColor: Colors.primary, borderWidth: 1.5 },
+  rankBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.surfaceLight,
+  },
+  rankNum: { fontSize: 13, fontFamily: "Inter_700Bold", color: Colors.textMuted },
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.primary + "30",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: { fontSize: 15, fontFamily: "Inter_700Bold", color: Colors.primary },
+  info: { flex: 1, gap: 2 },
+  name: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.text },
+  nameMe: { color: Colors.primary },
+  stats: { flexDirection: "row", gap: 10 },
+  stat: { flexDirection: "row", alignItems: "center", gap: 3 },
+  statText: { fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  xpCol: { alignItems: "center", gap: 2 },
+  xpValue: { fontSize: 13, fontFamily: "Inter_700Bold", color: Colors.xp },
+  empty: { alignItems: "center", paddingTop: 60, gap: 8 },
+  emptyTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text, marginTop: 8 },
+  emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
+});
