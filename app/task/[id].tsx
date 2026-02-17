@@ -19,7 +19,7 @@ import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest, queryClient } from "@/lib/query-client";
-import type { TaskDetails, TaskComment, VoteTaskCommentRequest } from "@/lib/types";
+import type { Task, TaskComment, VoteTaskCommentRequest } from "@/lib/types";
 import { format } from "date-fns";
 
 const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
@@ -39,10 +39,10 @@ export default function TaskDetailScreen() {
   const [commentText, setCommentText] = useState("");
 
   const {
-    data: details,
+    data: taskData,
     isLoading,
     refetch,
-  } = useQuery<TaskDetails>({
+  } = useQuery<Task>({
     queryKey: [`/api/v1/tasks/${id}`],
     enabled: isAuthenticated && !!id,
   });
@@ -52,13 +52,14 @@ export default function TaskDetailScreen() {
     enabled: isAuthenticated && !!id,
   });
 
-  const task = details?.task;
+  const task = taskData;
   const comments = commentsData?.data || [];
 
   function invalidateAll() {
     refetch();
     refetchComments();
-    if (listId) queryClient.invalidateQueries({ queryKey: [`/api/v1/lists/${listId}/tasks`] });
+    const lid = listId || task?.listId;
+    if (lid) queryClient.invalidateQueries({ queryKey: [`/api/v1/lists/${lid}/tasks`] });
     queryClient.invalidateQueries({ queryKey: ["/api/v1/feed"] });
     refreshProfile();
   }
@@ -105,6 +106,11 @@ export default function TaskDetailScreen() {
   });
 
   function handleReject() {
+    if (Platform.OS === "web") {
+      const reason = prompt("Provide a reason for rejection (min 5 characters):");
+      if (reason && reason.length >= 5) rejectMutation.mutate(reason);
+      return;
+    }
     Alert.prompt(
       "Reject Task",
       "Provide a reason for rejection (min 5 characters):",
@@ -135,7 +141,7 @@ export default function TaskDetailScreen() {
   const isCreator = task.creatorUserId === user?.id;
   const canStart = task.status === "open" && isAssignedToMe;
   const canComplete = task.status === "in_progress" && isAssignedToMe;
-  const canApprove = task.status === "pending_approval" && (isCreator || details?.canManageAssignee);
+  const canApprove = task.status === "pending_approval" && isCreator;
 
   return (
     <KeyboardAvoidingView
@@ -169,17 +175,14 @@ export default function TaskDetailScreen() {
           {task.description ? <Text style={styles.taskDesc}>{task.description}</Text> : null}
 
           <View style={styles.metaGrid}>
-            {details?.creator ? (
-              <MetaItem icon="person" label="Creator" value={details.creator.name} />
-            ) : null}
-            {details?.assignee ? (
-              <MetaItem icon="at" label="Assigned to" value={details.assignee.name} />
-            ) : null}
             {task.dueAt ? (
               <MetaItem icon="calendar" label="Due" value={format(new Date(task.dueAt), "MMM d, yyyy")} />
             ) : null}
             {task.completedAt ? (
               <MetaItem icon="checkmark-done" label="Completed" value={format(new Date(task.completedAt), "MMM d, yyyy")} />
+            ) : null}
+            {task.needsApproval ? (
+              <MetaItem icon="shield-checkmark" label="Approval" value="Required" />
             ) : null}
           </View>
 
@@ -200,7 +203,7 @@ export default function TaskDetailScreen() {
             </View>
           ) : null}
 
-          {task.subtasks.length > 0 ? (
+          {task.subtasks && task.subtasks.length > 0 ? (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>
                 Subtasks ({task.subtasks.filter((s) => s.isDone).length}/{task.subtasks.length})
