@@ -2,9 +2,10 @@ import { StyleSheet, Text, View, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import Colors from "@/constants/colors";
-import type { FeedItem } from "@/lib/types";
+import type { FeedItem, Task } from "@/lib/types";
 import { formatDistanceToNow, format, isPast, isToday } from "date-fns";
 import * as Haptics from "expo-haptics";
+import TaskCard from "@/components/TaskCard";
 
 const FEED_CONFIG: Record<string, { icon: keyof typeof Ionicons.glyphMap; color: string; verb: string }> = {
   task_created: { icon: "add-circle", color: Colors.info, verb: "created a task" },
@@ -18,17 +19,27 @@ const FEED_CONFIG: Record<string, { icon: keyof typeof Ionicons.glyphMap; color:
   reminder_due_today: { icon: "alarm", color: Colors.warning, verb: "due today" },
 };
 
-const STATUS_CONFIG: Record<string, { color: string; icon: keyof typeof Ionicons.glyphMap; label: string }> = {
-  open: { color: Colors.statusOpen, icon: "radio-button-off", label: "Open" },
-  in_progress: { color: Colors.statusInProgress, icon: "play-circle", label: "In Progress" },
-  pending_approval: { color: Colors.statusPendingApproval, icon: "time", label: "Pending" },
-  completed: { color: Colors.statusCompleted, icon: "checkmark-circle", label: "Done" },
-  cancelled: { color: Colors.statusCancelled, icon: "close-circle", label: "Cancelled" },
-};
-
 interface FeedItemCardProps {
   item: FeedItem;
   onDismiss?: (id: string) => void;
+}
+
+function feedItemToTask(item: FeedItem): Task {
+  const payload = item.payload || {};
+  return {
+    id: (item.taskId as string) || item.id,
+    listId: (item.listId as string) || "",
+    creatorUserId: "",
+    assigneeUserId: (item.actorUserId as string) || null,
+    title: (payload.taskTitle as string) || (payload.title as string) || "",
+    description: (payload.taskDescription as string) || (payload.description as string) || null,
+    dueAt: (payload.dueAt as string) || null,
+    rewardXp: (payload.rewardXp as number) || (payload.xpGained as number) || 0,
+    needsApproval: (payload.needsApproval as boolean) || false,
+    status: ((payload.taskStatus as string) || "in_progress") as Task["status"],
+    completedAt: null,
+    subtasks: [],
+  };
 }
 
 export default function FeedItemCard({ item, onDismiss }: FeedItemCardProps) {
@@ -36,71 +47,23 @@ export default function FeedItemCard({ item, onDismiss }: FeedItemCardProps) {
   const payload = item.payload || {};
   const actorName = (payload.actorName as string) || "Someone";
   const taskTitle = (payload.taskTitle as string) || (payload.title as string) || "";
-  const taskDescription = (payload.taskDescription as string) || (payload.description as string) || "";
   const xpGained = payload.xpGained as number | undefined;
   const rewardXp = payload.rewardXp as number | undefined;
   const newLevel = payload.newLevel as number | undefined;
   const dueAt = payload.dueAt as string | undefined;
-  const needsApproval = payload.needsApproval as boolean | undefined;
-  const taskStatus = (payload.taskStatus as string) || (item.type === "task_started" ? "in_progress" : "open");
   const timeAgo = formatDistanceToNow(new Date(item.createdAt), { addSuffix: true });
   const isInProgress = item.type === "task_started";
 
   const dueDate = dueAt ? new Date(dueAt) : null;
-  const isOverdue = dueDate && isPast(dueDate) && taskStatus !== "completed";
+  const isOverdue = dueDate && isPast(dueDate);
   const isDueToday = dueDate && isToday(dueDate);
 
-  function handlePress() {
-    if (item.taskId) {
-      router.push({ pathname: "/task/[id]", params: { id: item.taskId, listId: item.listId || "" } });
-    }
-  }
-
   if (isInProgress) {
-    const statusCfg = STATUS_CONFIG[taskStatus] || STATUS_CONFIG.in_progress;
-    const xpValue = rewardXp || xpGained || 0;
+    const task = feedItemToTask(item);
 
     return (
-      <Pressable
-        style={({ pressed }) => [styles.taskCard, pressed && styles.taskCardPressed]}
-        onPress={handlePress}
-      >
-        <View style={styles.taskRow}>
-          <View style={[styles.statusDot, { backgroundColor: statusCfg.color }]} />
-          <View style={styles.taskContent}>
-            <Text style={styles.taskTitle} numberOfLines={2}>{taskTitle}</Text>
-            {taskDescription ? (
-              <Text style={styles.taskDescription} numberOfLines={1}>{taskDescription}</Text>
-            ) : null}
-          </View>
-          {xpValue > 0 ? (
-            <View style={styles.xpBadge}>
-              <Ionicons name="diamond" size={12} color={Colors.xp} />
-              <Text style={styles.xpBadgeText}>{xpValue}</Text>
-            </View>
-          ) : null}
-        </View>
-
-        <View style={styles.taskFooter}>
-          <View style={styles.taskTags}>
-            <View style={[styles.statusTag, { backgroundColor: statusCfg.color + "20" }]}>
-              <Ionicons name={statusCfg.icon} size={10} color={statusCfg.color} />
-              <Text style={[styles.tagText, { color: statusCfg.color }]}>{statusCfg.label}</Text>
-            </View>
-            {needsApproval ? (
-              <View style={[styles.statusTag, { backgroundColor: Colors.secondary + "20" }]}>
-                <Ionicons name="shield-checkmark" size={10} color={Colors.secondary} />
-                <Text style={[styles.tagText, { color: Colors.secondary }]}>Approval</Text>
-              </View>
-            ) : null}
-          </View>
-          {dueDate ? (
-            <Text style={[styles.dueText, isOverdue && styles.overdue, isDueToday && styles.dueToday]}>
-              {isOverdue ? "Overdue" : isDueToday ? "Today" : format(dueDate, "MMM d")}
-            </Text>
-          ) : null}
-        </View>
-
+      <View>
+        <TaskCard task={task} />
         <View style={styles.taskMeta}>
           <View style={styles.taskMetaLeft}>
             <View style={styles.avatarSmall}>
@@ -123,8 +86,14 @@ export default function FeedItemCard({ item, onDismiss }: FeedItemCardProps) {
             </Pressable>
           ) : null}
         </View>
-      </Pressable>
+      </View>
     );
+  }
+
+  function handlePress() {
+    if (item.taskId) {
+      router.push({ pathname: "/task/[id]", params: { id: item.taskId, listId: item.listId || "" } });
+    }
   }
 
   return (
@@ -211,51 +180,12 @@ const styles = StyleSheet.create({
   xpVal: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.xp },
   hideBtn: { padding: 4, marginTop: 2 },
 
-  taskCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  taskCardPressed: { opacity: 0.8, transform: [{ scale: 0.98 }] },
-  taskRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
-  statusDot: { width: 8, height: 8, borderRadius: 4, marginTop: 6 },
-  taskContent: { flex: 1, gap: 2 },
-  taskTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.text },
-  taskDescription: { fontSize: 13, color: Colors.textSecondary, fontFamily: "Inter_400Regular" },
-  xpBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    backgroundColor: Colors.xp + "15",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-  },
-  xpBadgeText: { fontSize: 12, fontFamily: "Inter_700Bold", color: Colors.xp },
-  taskFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 10 },
-  taskTags: { flexDirection: "row", gap: 6, flexWrap: "wrap", flex: 1 },
-  statusTag: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  tagText: { fontSize: 10, fontFamily: "Inter_500Medium" },
-  dueText: { fontSize: 11, color: Colors.textSecondary, fontFamily: "Inter_500Medium" },
-  overdue: { color: Colors.danger },
-  dueToday: { color: Colors.accent },
   taskMeta: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 10,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: Colors.cardBorder,
+    marginTop: 6,
+    paddingHorizontal: 4,
   },
   taskMetaLeft: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1 },
   avatarSmall: {
