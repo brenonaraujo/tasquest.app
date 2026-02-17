@@ -39,7 +39,8 @@ export default function RegisterScreen() {
     try {
       await register(name.trim(), email.trim(), password);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.dismissAll();
+      while (router.canGoBack()) router.back();
+      router.replace("/(tabs)");
     } catch (e: any) {
       setError(e.message || "Registration failed");
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
