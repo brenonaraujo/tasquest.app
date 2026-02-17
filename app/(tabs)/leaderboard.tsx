@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -7,13 +7,16 @@ import {
   RefreshControl,
   ActivityIndicator,
   Platform,
+  Pressable,
+  ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import { useAuth } from "@/lib/auth-context";
-import type { LeaderboardResponse, LeaderboardEntry } from "@/lib/types";
+import type { LeaderboardResponse, LeaderboardEntry, TaskList } from "@/lib/types";
 
 const RANK_COLORS = [Colors.accent, "#C0C0C0", "#CD7F32"];
 
@@ -21,9 +24,19 @@ export default function LeaderboardScreen() {
   const insets = useSafeAreaInsets();
   const { isAuthenticated, user } = useAuth();
   const topPad = Platform.OS === "web" ? 67 : insets.top;
+  const [selectedListId, setSelectedListId] = useState<string | null>(null);
+
+  const { data: listsData } = useQuery<{ data: TaskList[] }>({
+    queryKey: ["/api/v1/lists"],
+    enabled: isAuthenticated,
+  });
+
+  const leaderboardKey = selectedListId
+    ? `/api/v1/gamification/leaderboard/${selectedListId}`
+    : "/api/v1/gamification/leaderboard/global";
 
   const { data, isLoading, refetch, isRefetching } = useQuery<LeaderboardResponse>({
-    queryKey: ["/api/v1/gamification/leaderboard/global"],
+    queryKey: [leaderboardKey],
     enabled: isAuthenticated,
   });
 
@@ -32,6 +45,7 @@ export default function LeaderboardScreen() {
   }, [refetch]);
 
   const entries = data?.data || [];
+  const lists = listsData?.data || [];
 
   return (
     <View style={styles.container}>
@@ -43,11 +57,57 @@ export default function LeaderboardScreen() {
           paddingHorizontal: 16,
           paddingBottom: 100,
         }}
-        contentInsetAdjustmentBehavior="automatic"
         ListHeaderComponent={
           <View style={styles.header}>
             <Text style={styles.title}>Ranking</Text>
-            <Text style={styles.subtitle}>Top questers globally</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.filterStrip}
+              contentContainerStyle={styles.filterContent}
+            >
+              <Pressable
+                style={[styles.filterChip, !selectedListId && styles.filterChipActive]}
+                onPress={() => {
+                  setSelectedListId(null);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+              >
+                <Ionicons
+                  name="globe-outline"
+                  size={13}
+                  color={!selectedListId ? Colors.primary : Colors.textMuted}
+                />
+                <Text style={[styles.filterText, !selectedListId && styles.filterTextActive]}>
+                  Global
+                </Text>
+              </Pressable>
+              {lists.map((list) => {
+                const isActive = selectedListId === list.id;
+                return (
+                  <Pressable
+                    key={list.id}
+                    style={[styles.filterChip, isActive && styles.filterChipActive]}
+                    onPress={() => {
+                      setSelectedListId(list.id);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                  >
+                    <Ionicons
+                      name={list.isShared ? "people-outline" : "list-outline"}
+                      size={13}
+                      color={isActive ? Colors.primary : Colors.textMuted}
+                    />
+                    <Text
+                      style={[styles.filterText, isActive && styles.filterTextActive]}
+                      numberOfLines={1}
+                    >
+                      {list.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
           </View>
         }
         renderItem={({ item, index }) => (
@@ -121,9 +181,35 @@ function LeaderboardRow({ entry, rank, isMe }: { entry: LeaderboardEntry; rank: 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: 40 },
-  header: { marginBottom: 20 },
-  title: { fontSize: 26, fontFamily: "Inter_700Bold", color: Colors.text },
-  subtitle: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, marginTop: 2 },
+  header: { marginBottom: 16 },
+  title: { fontSize: 26, fontFamily: "Inter_700Bold", color: Colors.text, marginBottom: 12 },
+  filterStrip: { marginBottom: 4 },
+  filterContent: { gap: 6 },
+  filterChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 18,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+    maxWidth: 150,
+  },
+  filterChipActive: {
+    backgroundColor: Colors.primary + "18",
+    borderColor: Colors.primary + "50",
+  },
+  filterText: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    color: Colors.textMuted,
+  },
+  filterTextActive: {
+    color: Colors.primary,
+    fontFamily: "Inter_600SemiBold",
+  },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -163,5 +249,5 @@ const styles = StyleSheet.create({
   xpValue: { fontSize: 13, fontFamily: "Inter_700Bold", color: Colors.xp },
   empty: { alignItems: "center", paddingTop: 60, gap: 8 },
   emptyTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text, marginTop: 8 },
-  emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
+  emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" as const },
 });

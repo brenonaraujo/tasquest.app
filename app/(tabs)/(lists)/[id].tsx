@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import { useAuth } from "@/lib/auth-context";
 import TaskCard from "@/components/TaskCard";
@@ -21,12 +22,12 @@ import type { TaskList, Task, ListMember, TaskStatus } from "@/lib/types";
 
 type FilterOption = "all" | TaskStatus;
 
-const FILTERS: { key: FilterOption; label: string; color: string }[] = [
-  { key: "all", label: "All", color: Colors.text },
-  { key: "open", label: "Open", color: Colors.statusOpen },
-  { key: "in_progress", label: "In Progress", color: Colors.statusInProgress },
-  { key: "pending_approval", label: "Pending", color: Colors.statusPendingApproval },
-  { key: "completed", label: "Done", color: Colors.statusCompleted },
+const FILTERS: { key: FilterOption; label: string; icon: keyof typeof Ionicons.glyphMap; color: string }[] = [
+  { key: "all", label: "All", icon: "apps-outline", color: Colors.text },
+  { key: "open", label: "Open", icon: "radio-button-off", color: Colors.statusOpen },
+  { key: "in_progress", label: "Active", icon: "play-circle-outline", color: Colors.statusInProgress },
+  { key: "pending_approval", label: "Review", icon: "time-outline", color: Colors.statusPendingApproval },
+  { key: "completed", label: "Done", icon: "checkmark-circle-outline", color: Colors.statusCompleted },
 ];
 
 export default function ListDetailScreen() {
@@ -79,7 +80,11 @@ export default function ListDetailScreen() {
   return (
     <View style={styles.container}>
       <View style={[styles.topBar, { paddingTop: topPad + 8 }]}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
+        <Pressable
+          onPress={() => router.back()}
+          hitSlop={12}
+          style={({ pressed }) => [pressed && { opacity: 0.6 }]}
+        >
           <Ionicons name="chevron-back" size={24} color={Colors.text} />
         </Pressable>
         <View style={styles.topBarCenter}>
@@ -94,8 +99,12 @@ export default function ListDetailScreen() {
           ) : null}
         </View>
         <Pressable
-          onPress={() => router.push({ pathname: "/create-task", params: { listId: id } })}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            router.push({ pathname: "/create-task", params: { listId: id } });
+          }}
           hitSlop={12}
+          style={({ pressed }) => [pressed && { opacity: 0.6 }]}
         >
           <Ionicons name="add-circle" size={28} color={Colors.primary} />
         </Pressable>
@@ -121,14 +130,18 @@ export default function ListDetailScreen() {
                 key={f.key}
                 style={[
                   styles.filterChip,
-                  isActive && { backgroundColor: f.color + "25", borderColor: f.color },
+                  isActive && { backgroundColor: f.color + "18", borderColor: f.color + "50" },
                 ]}
-                onPress={() => setActiveFilter(f.key)}
+                onPress={() => {
+                  setActiveFilter(f.key);
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
               >
+                <Ionicons name={f.icon} size={13} color={isActive ? f.color : Colors.textMuted} />
                 <Text style={[styles.filterText, isActive && { color: f.color }]}>
                   {f.label}
                 </Text>
-                <View style={[styles.filterCount, isActive && { backgroundColor: f.color + "30" }]}>
+                <View style={[styles.filterCount, isActive && { backgroundColor: f.color + "25" }]}>
                   <Text style={[styles.filterCountText, isActive && { color: f.color }]}>
                     {count}
                   </Text>
@@ -169,7 +182,7 @@ export default function ListDetailScreen() {
                   <Text style={styles.emptyTitle}>No tasks yet</Text>
                   <Text style={styles.emptyText}>Add your first task to get started</Text>
                   <Pressable
-                    style={({ pressed }) => [styles.emptyBtn, pressed && { opacity: 0.8 }]}
+                    style={({ pressed }) => [styles.emptyBtn, pressed && { opacity: 0.8, transform: [{ scale: 0.97 }] }]}
                     onPress={() => router.push({ pathname: "/create-task", params: { listId: id } })}
                   >
                     <Ionicons name="add" size={18} color={Colors.white} />
@@ -214,41 +227,41 @@ const styles = StyleSheet.create({
   },
   filterScroll: {
     paddingHorizontal: 16,
-    gap: 8,
+    gap: 6,
   },
   filterChip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: Colors.cardBorder,
     backgroundColor: Colors.surface,
   },
   filterText: {
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: "Inter_500Medium",
     color: Colors.textSecondary,
   },
   filterCount: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Colors.surfaceLight,
-    paddingHorizontal: 6,
+    paddingHorizontal: 5,
   },
   filterCountText: {
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: "Inter_600SemiBold",
     color: Colors.textMuted,
   },
   empty: { alignItems: "center", paddingTop: 60, gap: 8 },
   emptyTitle: { fontSize: 17, fontFamily: "Inter_600SemiBold", color: Colors.text, marginTop: 8 },
-  emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" },
+  emptyText: { fontSize: 14, fontFamily: "Inter_400Regular", color: Colors.textSecondary, textAlign: "center" as const },
   emptyBtn: {
     flexDirection: "row",
     alignItems: "center",
