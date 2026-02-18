@@ -17,6 +17,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
+import * as Clipboard from "expo-clipboard";
 import Colors from "@/constants/colors";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest, getApiUrl, queryClient } from "@/lib/query-client";
@@ -87,13 +88,17 @@ export default function ListMembersScreen() {
 
   const removeMutation = useMutation({
     mutationFn: async (member: ListMember) => {
-      const targetId = member.userId || member.id;
+      const isPending = member.status === "pending";
+      const targetId = isPending ? member.id : member.userId;
       if (!targetId) {
         throw new Error("Cannot revoke this member yet");
       }
       setRemovingId(targetId);
       setRemoveError("");
-      await apiRequest("DELETE", `/api/v1/lists/${id}/members/${targetId}`);
+      const route = isPending
+        ? `/api/v1/lists/${id}/invites/${targetId}`
+        : `/api/v1/lists/${id}/members/${targetId}`;
+      await apiRequest("DELETE", route);
     },
     onSuccess: () => {
       setRemovingId(null);
@@ -110,6 +115,12 @@ export default function ListMembersScreen() {
     const baseUrl = getApiUrl();
     return new URL(inviteData.invitePath, baseUrl).toString();
   }, [inviteData]);
+
+  function buildInviteUrl(invitePath?: string | null) {
+    if (!invitePath) return "";
+    const baseUrl = getApiUrl();
+    return new URL(invitePath, baseUrl).toString();
+  }
 
   const onRefresh = useCallback(() => {
     refetch();
@@ -147,6 +158,13 @@ export default function ListMembersScreen() {
     }
   }
 
+  async function handleCopyInvite(invitePath?: string | null) {
+    const url = buildInviteUrl(invitePath);
+    if (!url) return;
+    await Clipboard.setStringAsync(url);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }
+
   function confirmRemove(member: ListMember) {
     const isPending = member.status === "pending";
     const actionLabel = isPending ? "Revoke invite" : "Remove member";
@@ -181,7 +199,7 @@ export default function ListMembersScreen() {
       : member.email.slice(0, 2).toUpperCase();
     const isPending = member.status === "pending";
     const canRevoke = canManage && member.role !== "owner";
-    const targetId = member.userId || member.id;
+    const targetId = member.status === "pending" ? member.id : member.userId;
     const isRemoving = targetId ? removingId === targetId : false;
 
     return (
@@ -211,18 +229,29 @@ export default function ListMembersScreen() {
           ) : null}
         </View>
         {canRevoke ? (
-          <Pressable
-            onPress={() => confirmRemove(member)}
-            disabled={isRemoving}
-            hitSlop={8}
-            style={({ pressed }) => [styles.removeBtn, pressed && { opacity: 0.6 }]}
-          >
-            {isRemoving ? (
-              <ActivityIndicator size={14} color={Colors.danger} />
-            ) : (
-              <Ionicons name={isPending ? "close-circle" : "trash-outline"} size={18} color={Colors.danger} />
-            )}
-          </Pressable>
+          <View style={styles.memberActions}>
+            {isPending && member.invitePath ? (
+              <Pressable
+                onPress={() => handleCopyInvite(member.invitePath)}
+                hitSlop={8}
+                style={({ pressed }) => [styles.copyBtn, pressed && { opacity: 0.6 }]}
+              >
+                <Ionicons name="link" size={16} color={Colors.primary} />
+              </Pressable>
+            ) : null}
+            <Pressable
+              onPress={() => confirmRemove(member)}
+              disabled={isRemoving}
+              hitSlop={8}
+              style={({ pressed }) => [styles.removeBtn, pressed && { opacity: 0.6 }]}
+            >
+              {isRemoving ? (
+                <ActivityIndicator size={14} color={Colors.danger} />
+              ) : (
+                <Ionicons name={isPending ? "close-circle" : "trash-outline"} size={18} color={Colors.danger} />
+              )}
+            </Pressable>
+          </View>
         ) : null}
       </View>
     );
@@ -323,13 +352,22 @@ export default function ListMembersScreen() {
                 </View>
                 <View style={styles.inviteMeta}>
                   <Text style={styles.inviteMetaText}>Expires {new Date(inviteData.expiresAt).toLocaleDateString()}</Text>
-                  <Pressable
-                    onPress={handleShareInvite}
-                    style={({ pressed }) => [styles.shareBtn, pressed && { opacity: 0.8 }]}
-                  >
-                    <Ionicons name="share-social" size={14} color={Colors.primary} />
-                    <Text style={styles.shareText}>Share link</Text>
-                  </Pressable>
+                  <View style={styles.inviteActions}>
+                    <Pressable
+                      onPress={handleShareInvite}
+                      style={({ pressed }) => [styles.linkBtn, pressed && { opacity: 0.8 }]}
+                    >
+                      <Ionicons name="link" size={14} color={Colors.primary} />
+                      <Text style={styles.shareText}>Link</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={handleShareInvite}
+                      style={({ pressed }) => [styles.shareBtn, pressed && { opacity: 0.8 }]}
+                    >
+                      <Ionicons name="share-social" size={14} color={Colors.primary} />
+                      <Text style={styles.shareText}>Share</Text>
+                    </Pressable>
+                  </View>
                 </View>
               </View>
             ) : null}
@@ -462,6 +500,18 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   inviteMetaText: { fontSize: 11, fontFamily: "Inter_400Regular", color: Colors.textMuted },
+  inviteActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  linkBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: Colors.primary + "12",
+    borderWidth: 1,
+    borderColor: Colors.primary + "30",
+  },
   shareBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -524,6 +574,15 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.statusPendingApproval + "18",
   },
   pendingText: { fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.statusPendingApproval },
+  memberActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  copyBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.primary + "12",
+  },
   removeBtn: {
     width: 32,
     height: 32,

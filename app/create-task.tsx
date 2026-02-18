@@ -10,20 +10,23 @@ import {
   ActivityIndicator,
   Platform,
   KeyboardAvoidingView,
+  type TextInputProps,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import { apiRequest, queryClient, getApiUrl, getAuthToken } from "@/lib/query-client";
 import { fetch } from "expo/fetch";
 import { useAuth } from "@/lib/auth-context";
 import type { XPSuggestionResponse, TaskList, ListMember } from "@/lib/types";
+import { format } from "date-fns";
 
 export default function CreateTaskScreen() {
   const params = useLocalSearchParams<{ listId?: string }>();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const [selectedListId, setSelectedListId] = useState(params.listId || "");
   const [showListPicker, setShowListPicker] = useState(!params.listId);
   const [title, setTitle] = useState("");
@@ -32,6 +35,14 @@ export default function CreateTaskScreen() {
   const [needsApproval, setNeedsApproval] = useState(false);
   const [assigneeUserId, setAssigneeUserId] = useState<string | null>(null);
   const [showAssigneePicker, setShowAssigneePicker] = useState(false);
+  const [approverUserId, setApproverUserId] = useState<string | null>(null);
+  const [showApproverPicker, setShowApproverPicker] = useState(false);
+  const [dueAt, setDueAt] = useState<Date | null>(null);
+  const [dueAtInput, setDueAtInput] = useState("");
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const webDateInputProps: Partial<TextInputProps> & { type?: string } =
+    Platform.OS === "web" ? ({ type: "datetime-local" } as Partial<TextInputProps>) : {};
   const [subtaskInputs, setSubtaskInputs] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
@@ -51,6 +62,7 @@ export default function CreateTaskScreen() {
   const members = membersData?.data || [];
   const selectedList = lists.find((l) => l.id === selectedListId);
   const selectedAssignee = members.find((m) => m.userId === assigneeUserId);
+  const selectedApprover = members.find((m) => m.userId === approverUserId);
 
   useEffect(() => {
     if (!selectedListId && lists.length === 1) {
@@ -59,15 +71,41 @@ export default function CreateTaskScreen() {
     }
   }, [lists, selectedListId]);
 
+  useEffect(() => {
+    if (!needsApproval) return;
+    if (approverUserId) return;
+    if (user?.id) setApproverUserId(user.id);
+  }, [needsApproval, approverUserId, user?.id]);
+
+  useEffect(() => {
+    if (!needsApproval) return;
+    if (members.length === 0) return;
+    const activeMemberIds = new Set(members.filter((m) => m.status === "active").map((m) => m.userId));
+    if (approverUserId && activeMemberIds.has(approverUserId)) return;
+    if (user?.id && activeMemberIds.has(user.id)) {
+      setApproverUserId(user.id);
+      return;
+    }
+    const firstActive = members.find((m) => m.status === "active");
+    if (firstActive) setApproverUserId(firstActive.userId);
+  }, [members, needsApproval, approverUserId, user?.id]);
+
   const createMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/v1/lists/${selectedListId}/tasks`, {
+      const payload: Record<string, unknown> = {
         title: title.trim(),
         description: description.trim() || null,
         rewardXp,
         needsApproval,
         assigneeUserId: assigneeUserId || null,
-      });
+      };
+      if (needsApproval && approverUserId) {
+        payload.approverUserId = approverUserId;
+      }
+      if (dueAt) {
+        payload.dueAt = dueAt.toISOString();
+      }
+      const res = await apiRequest("POST", `/api/v1/lists/${selectedListId}/tasks`, payload);
       const task = await res.json();
       const validSubtasks = subtaskInputs.filter((s) => s.trim());
       for (const st of validSubtasks) {
@@ -78,6 +116,8 @@ export default function CreateTaskScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       queryClient.invalidateQueries({ queryKey: [`/api/v1/lists/${selectedListId}/tasks`] });
       queryClient.invalidateQueries({ queryKey: ["/api/v1/feed"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/v1/notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/v1/active-tasks"] });
       router.back();
     },
     onError: (err: Error) => {
@@ -142,6 +182,14 @@ export default function CreateTaskScreen() {
     }
     if (rewardXp < 5 || rewardXp > 50) {
       setError("XP must be between 5 and 50");
+      return;
+    }
+    if (Platform.OS === "web" && dueAtInput && !dueAt) {
+      setError("Deadline must be a valid date and time");
+      return;
+    }
+    if (needsApproval && !approverUserId) {
+      setError("Select an approver");
       return;
     }
     setError("");
@@ -266,6 +314,90 @@ export default function CreateTaskScreen() {
             maxLength={1000}
             numberOfLines={3}
           />
+        </View>
+
+        <View style={styles.field}>
+          <View style={styles.deadlineHeader}>
+            <Text style={styles.label}>Deadline</Text>
+            {dueAt ? (
+              <Pressable
+                onPress={() => {
+                  setDueAt(null);
+                  setDueAtInput("");
+                }}
+                style={({ pressed }) => [styles.clearBtn, pressed && { opacity: 0.7 }]}
+              >
+                <Ionicons name="close" size={14} color={Colors.textMuted} />
+                <Text style={styles.clearText}>Clear</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          {Platform.OS === "web" ? (
+            <TextInput
+              style={styles.input}
+              placeholder="YYYY-MM-DDTHH:mm"
+              placeholderTextColor={Colors.textMuted}
+              value={dueAtInput}
+              onChangeText={(value) => {
+                setDueAtInput(value);
+                const parsed = new Date(value);
+                if (!Number.isNaN(parsed.getTime())) {
+                  setDueAt(parsed);
+                } else {
+                  setDueAt(null);
+                }
+              }}
+              {...webDateInputProps}
+            />
+          ) : (
+            <Pressable
+              style={({ pressed }) => [styles.selectedPill, pressed && { opacity: 0.8 }]}
+              onPress={() => {
+                if (Platform.OS === "ios") {
+                  setShowDatePicker(true);
+                } else {
+                  setShowDatePicker(true);
+                }
+              }}
+            >
+              <Ionicons name="calendar" size={16} color={Colors.textMuted} />
+              <Text style={[styles.selectedPillText, !dueAt && { color: Colors.textMuted }]}>
+                {dueAt ? format(dueAt, "MMM d, yyyy • HH:mm") : "Add date & time"}
+              </Text>
+              <Ionicons name="chevron-down" size={14} color={Colors.textMuted} />
+            </Pressable>
+          )}
+          {showDatePicker && Platform.OS !== "web" ? (
+            <DateTimePicker
+              mode={Platform.OS === "ios" ? "datetime" : "date"}
+              value={dueAt || new Date()}
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              onChange={(_event, selectedDate) => {
+                setShowDatePicker(false);
+                if (!selectedDate) return;
+                if (Platform.OS === "android") {
+                  setDueAt(selectedDate);
+                  setShowTimePicker(true);
+                } else {
+                  setDueAt(selectedDate);
+                }
+              }}
+            />
+          ) : null}
+          {showTimePicker && Platform.OS === "android" ? (
+            <DateTimePicker
+              mode="time"
+              value={dueAt || new Date()}
+              display="default"
+              onChange={(_event, selectedDate) => {
+                setShowTimePicker(false);
+                if (!selectedDate || !dueAt) return;
+                const merged = new Date(dueAt);
+                merged.setHours(selectedDate.getHours(), selectedDate.getMinutes(), 0, 0);
+                setDueAt(merged);
+              }}
+            />
+          ) : null}
         </View>
 
         {selectedListId && members.length > 0 ? (
@@ -444,7 +576,7 @@ export default function CreateTaskScreen() {
         <View style={styles.switchRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.switchLabel}>Requires Approval</Text>
-            <Text style={styles.switchDesc}>An admin must approve before awarding XP</Text>
+            <Text style={styles.switchDesc}>A designated approver must approve before awarding XP</Text>
           </View>
           <Switch
             value={needsApproval}
@@ -453,6 +585,69 @@ export default function CreateTaskScreen() {
             thumbColor={needsApproval ? Colors.primary : Colors.textMuted}
           />
         </View>
+
+        {needsApproval && selectedListId ? (
+          <View style={styles.field}>
+            <Text style={styles.label}>Aprovador</Text>
+            {showApproverPicker ? (
+              <View style={styles.pickerContainer}>
+                {members
+                  .filter((m) => m.status === "active")
+                  .map((member) => (
+                    <Pressable
+                      key={member.userId}
+                      style={({ pressed }) => [
+                        styles.pickerItem,
+                        approverUserId === member.userId && styles.pickerItemActive,
+                        pressed && { opacity: 0.8 },
+                      ]}
+                      onPress={() => {
+                        setApproverUserId(member.userId);
+                        setShowApproverPicker(false);
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }}
+                    >
+                      <View style={styles.memberAvatar}>
+                        <Text style={styles.memberAvatarText}>
+                          {member.name.charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[
+                            styles.pickerItemText,
+                            approverUserId === member.userId && { color: Colors.primary },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {member.name}
+                        </Text>
+                        <Text style={styles.memberRole}>{member.role}</Text>
+                      </View>
+                      {approverUserId === member.userId ? (
+                        <Ionicons name="checkmark" size={16} color={Colors.primary} />
+                      ) : null}
+                    </Pressable>
+                  ))}
+              </View>
+            ) : (
+              <Pressable
+                style={({ pressed }) => [styles.selectedPill, pressed && { opacity: 0.8 }]}
+                onPress={() => setShowApproverPicker(true)}
+              >
+                <View style={styles.memberAvatar}>
+                  <Text style={styles.memberAvatarText}>
+                    {(selectedApprover?.name || user?.name || "A").charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+                <Text style={styles.selectedPillText}>
+                  {approverUserId === user?.id ? "Aprovador: voce" : selectedApprover?.name || "Selecionar aprovador"}
+                </Text>
+                <Ionicons name="chevron-down" size={14} color={Colors.textMuted} />
+              </Pressable>
+            )}
+          </View>
+        ) : null}
 
         <Pressable
           style={({ pressed }) => [
@@ -623,6 +818,19 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   aiReasonText: { fontSize: 12, color: Colors.secondary, fontFamily: "Inter_400Regular", flex: 1, lineHeight: 17 },
+  deadlineHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
+  clearBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: Colors.surfaceLight,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+  },
+  clearText: { fontSize: 12, fontFamily: "Inter_500Medium", color: Colors.textMuted },
   subtaskHeader: {
     flexDirection: "row",
     alignItems: "center",

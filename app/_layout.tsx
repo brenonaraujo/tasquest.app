@@ -30,6 +30,7 @@ function RootLayoutNav() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="(auth)" options={{ presentation: "modal", headerShown: false }} />
       <Stack.Screen name="task/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="invite/[token]" options={{ headerShown: false }} />
       <Stack.Screen
         name="create-task"
         options={{

@@ -100,9 +100,8 @@ export default function ListDetailScreen() {
               hitSlop={8}
               style={({ pressed }) => [styles.sharedTag, pressed && { opacity: 0.7 }]}
             >
-              <Ionicons name="people" size={10} color={Colors.secondary} />
+              <Ionicons name="person-add-outline" size={16} color={Colors.primary} />
               <Text style={styles.sharedTagText}>{members.length} members</Text>
-              <Ionicons name="person-add-outline" size={15} color={Colors.primary} />
             </Pressable>
           ) : null}
         </View>
@@ -226,16 +225,16 @@ const styles = StyleSheet.create({
   sharedTag: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
     alignSelf: "flex-start",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-    backgroundColor: Colors.secondary + "15",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    backgroundColor: Colors.primary + "12",
     borderWidth: 1,
-    borderColor: Colors.secondary + "30",
+    borderColor: Colors.primary + "30",
   },
-  sharedTagText: { fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.secondary },
+  sharedTagText: { fontSize: 11, fontFamily: "Inter_600SemiBold", color: Colors.primary },
   descBox: { paddingHorizontal: 16, paddingBottom: 8 },
   descText: { fontSize: 13, color: Colors.textSecondary, fontFamily: "Inter_400Regular" },
   filterContainer: {

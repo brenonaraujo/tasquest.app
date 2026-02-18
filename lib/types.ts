@@ -46,6 +46,7 @@ export interface ListMember {
   name: string;
   email: string;
   avatarUrl?: string | null;
+  invitePath?: string | null;
   createdAt: string;
 }
 
@@ -54,6 +55,7 @@ export interface Task {
   listId: string;
   creatorUserId: string;
   assigneeUserId?: string | null;
+  approverUserId?: string | null;
   title: string;
   description?: string | null;
   dueAt?: string | null;
@@ -71,6 +73,11 @@ export interface CreateTaskRequest {
   rewardXp: number;
   needsApproval: boolean;
   assigneeUserId?: string | null;
+  approverUserId?: string | null;
+}
+
+export interface UpdateTaskApproverRequest {
+  approverUserId: string;
 }
 
 export interface Subtask {

@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -19,7 +19,7 @@ import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest, queryClient } from "@/lib/query-client";
-import type { Task, TaskComment, VoteTaskCommentRequest } from "@/lib/types";
+import type { ListMember, Task, TaskComment, TaskDetails, UpdateTaskApproverRequest, VoteTaskCommentRequest } from "@/lib/types";
 import { format } from "date-fns";
 
 const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
@@ -40,13 +40,15 @@ export default function TaskDetailScreen() {
   const [togglingSubtasks, setTogglingSubtasks] = useState<Set<string>>(new Set());
   const [votingComments, setVotingComments] = useState<Set<string>>(new Set());
   const [votingDirection, setVotingDirection] = useState<Record<string, "up" | "down">>({});
+  const [showApproverPicker, setShowApproverPicker] = useState(false);
+  const [pendingApproverId, setPendingApproverId] = useState<string | null>(null);
 
   const {
     data: taskData,
     isLoading,
     refetch,
-  } = useQuery<Task>({
-    queryKey: [`/api/v1/tasks/${id}`],
+  } = useQuery<TaskDetails>({
+    queryKey: [`/api/v1/tasks/${id}/details`],
     enabled: isAuthenticated && !!id,
   });
 
@@ -55,8 +57,16 @@ export default function TaskDetailScreen() {
     enabled: isAuthenticated && !!id,
   });
 
-  const task = taskData;
+  const task = taskData?.task;
+  const listIdToUse = (listId as string | undefined) || task?.listId;
+  const { data: membersData } = useQuery<{ data: ListMember[] }>({
+    queryKey: [`/api/v1/lists/${listIdToUse}/members`],
+    enabled: isAuthenticated && !!listIdToUse,
+  });
   const comments = commentsData?.data || [];
+  const members = membersData?.data || [];
+  const activeMembers = useMemo(() => members.filter((m) => m.status === "active"), [members]);
+  const approver = members.find((m) => m.userId === task?.approverUserId);
 
   function invalidateAll() {
     refetch();
@@ -64,6 +74,8 @@ export default function TaskDetailScreen() {
     const lid = listId || task?.listId;
     if (lid) queryClient.invalidateQueries({ queryKey: [`/api/v1/lists/${lid}/tasks`] });
     queryClient.invalidateQueries({ queryKey: ["/api/v1/feed"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/v1/notifications"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/v1/active-tasks"] });
     refreshProfile();
   }
 
@@ -80,11 +92,39 @@ export default function TaskDetailScreen() {
   const approveMutation = useMutation({
     mutationFn: () => apiRequest("POST", `/api/v1/tasks/${id}/approve`),
     onSuccess: () => { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); invalidateAll(); },
+    onError: (err: Error) => {
+      Alert.alert("Approval failed", err.message || "You are not allowed to approve this task");
+    },
   });
 
   const rejectMutation = useMutation({
     mutationFn: (reason: string) => apiRequest("POST", `/api/v1/tasks/${id}/reject`, { reason }),
     onSuccess: () => { invalidateAll(); },
+    onError: (err: Error) => {
+      Alert.alert("Rejection failed", err.message || "You are not allowed to reject this task");
+    },
+  });
+
+  const approverMutation = useMutation({
+    mutationFn: async (approverUserId: string) => {
+      const payload: UpdateTaskApproverRequest = { approverUserId };
+      await apiRequest("PATCH", `/api/v1/tasks/${id}/approver`, payload);
+    },
+    onSuccess: () => {
+      setShowApproverPicker(false);
+      setPendingApproverId(null);
+      invalidateAll();
+      if (task?.status === "pending_approval") {
+        Alert.alert(
+          "Approver updated",
+          "This task moved back to in progress. You will need to complete it again to request approval."
+        );
+      }
+    },
+    onError: (err: Error) => {
+      setPendingApproverId(null);
+      Alert.alert("Cannot change approver", err.message || "You are not allowed to change the approver");
+    },
   });
 
   const commentMutation = useMutation({
@@ -164,7 +204,9 @@ export default function TaskDetailScreen() {
   const isCreator = task.creatorUserId === user?.id;
   const canStart = task.status === "open";
   const canComplete = task.status === "in_progress" && isAssignedToMe;
-  const canApprove = task.status === "pending_approval" && isCreator;
+  const canApprove = task.status === "pending_approval" && task.approverUserId === user?.id;
+  const canChangeApprover = task.needsApproval && isCreator;
+  const approverLabel = task.approverUserId === user?.id ? "Voce" : approver?.name || "Nao definido";
 
   return (
     <KeyboardAvoidingView
@@ -205,9 +247,96 @@ export default function TaskDetailScreen() {
               <MetaItem icon="checkmark-done" label="Completed" value={format(new Date(task.completedAt), "MMM d, yyyy")} />
             ) : null}
             {task.needsApproval ? (
-              <MetaItem icon="shield-checkmark" label="Approval" value="Required" />
+              <>
+                <MetaItem icon="shield-checkmark" label="Approval" value="Required" />
+                <MetaItem icon="person" label="Aprovador" value={approverLabel} />
+              </>
             ) : null}
           </View>
+
+          {canChangeApprover ? (
+            <View style={styles.section}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>Aprovador</Text>
+                <Pressable
+                  style={({ pressed }) => [styles.linkBtn, pressed && { opacity: 0.7 }]}
+                  onPress={() => setShowApproverPicker((v) => !v)}
+                >
+                  <Ionicons name="swap-horizontal" size={14} color={Colors.primary} />
+                  <Text style={styles.linkBtnText}>Alterar</Text>
+                </Pressable>
+              </View>
+              {showApproverPicker ? (
+                <View style={styles.pickerContainer}>
+                  {activeMembers.map((member) => (
+                    <Pressable
+                      key={member.userId}
+                      style={({ pressed }) => [
+                        styles.pickerItem,
+                        task.approverUserId === member.userId && styles.pickerItemActive,
+                        pressed && { opacity: 0.8 },
+                      ]}
+                      onPress={() => {
+                        const needsConfirm = task.status === "pending_approval";
+                        const targetId = member.userId;
+                        if (targetId === task.approverUserId) {
+                          setShowApproverPicker(false);
+                          return;
+                        }
+                        const message = needsConfirm
+                          ? "Changing the approver will move this task back to in progress. You will need to complete it again to request approval. Continue?"
+                          : "Change approver to this member?";
+                        if (Platform.OS === "web") {
+                          const confirmed = typeof globalThis.confirm === "function" ? globalThis.confirm(message) : false;
+                          if (!confirmed) return;
+                          setPendingApproverId(targetId);
+                          approverMutation.mutate(targetId);
+                          return;
+                        }
+                        Alert.alert("Change approver", message, [
+                          { text: "Cancel", style: "cancel" },
+                          {
+                            text: "Confirm",
+                            style: needsConfirm ? "destructive" : "default",
+                            onPress: () => {
+                              setPendingApproverId(targetId);
+                              approverMutation.mutate(targetId);
+                            },
+                          },
+                        ]);
+                      }}
+                      disabled={approverMutation.isPending}
+                    >
+                      <View style={styles.memberAvatar}>
+                        <Text style={styles.memberAvatarText}>
+                          {member.name.charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[
+                            styles.pickerItemText,
+                            task.approverUserId === member.userId && { color: Colors.primary },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {member.name}
+                        </Text>
+                        <Text style={styles.memberRole}>{member.role}</Text>
+                      </View>
+                      {pendingApproverId === member.userId && approverMutation.isPending ? (
+                        <ActivityIndicator size={14} color={Colors.primary} />
+                      ) : task.approverUserId === member.userId ? (
+                        <Ionicons name="checkmark" size={16} color={Colors.primary} />
+                      ) : null}
+                    </Pressable>
+                  ))}
+                </View>
+              ) : (
+                <Text style={styles.approverText}>Aprovador: {approverLabel}</Text>
+              )}
+            </View>
+          ) : null}
 
           {(canStart || canComplete || canApprove) ? (
             <View style={styles.actions}>
@@ -412,6 +541,63 @@ const styles = StyleSheet.create({
   actionBtnText: { fontSize: 14, fontFamily: "Inter_600SemiBold", color: Colors.white },
   section: { marginBottom: 20 },
   sectionTitle: { fontSize: 16, fontFamily: "Inter_700Bold", color: Colors.text, marginBottom: 10 },
+  sectionHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
+  linkBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: Colors.primary + "12",
+    borderWidth: 1,
+    borderColor: Colors.primary + "30",
+  },
+  linkBtnText: { fontSize: 12, fontFamily: "Inter_600SemiBold", color: Colors.primary },
+  approverText: { fontSize: 13, fontFamily: "Inter_500Medium", color: Colors.textSecondary },
+  pickerContainer: {
+    backgroundColor: Colors.surface,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+    overflow: "hidden",
+  },
+  pickerItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.cardBorder,
+  },
+  pickerItemActive: {
+    backgroundColor: Colors.primary + "10",
+  },
+  pickerItemText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+    color: Colors.text,
+  },
+  memberAvatar: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: Colors.primary + "25",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  memberAvatarText: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+    color: Colors.primary,
+  },
+  memberRole: {
+    fontSize: 10,
+    fontFamily: "Inter_400Regular",
+    color: Colors.textMuted,
+  },
   subtaskRow: {
     flexDirection: "row",
     alignItems: "center",

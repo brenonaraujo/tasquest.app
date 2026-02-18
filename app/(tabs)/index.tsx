@@ -97,9 +97,9 @@ export default function FeedScreen() {
             const tasksData: ListTasksResponse = await tasksRes.json();
             const tasks = tasksData.data || [];
             for (const task of tasks) {
-              if (ACTIVE_TASK_STATUSES.has(task.status)) {
-                allTasks.push(task);
-              }
+              if (!ACTIVE_TASK_STATUSES.has(task.status)) continue;
+              if (task.status === "pending_approval" && task.approverUserId !== user?.id) continue;
+              allTasks.push(task);
             }
           } catch {}
         })
