@@ -1,0 +1,10 @@
+node_modules
+.expo
+static-build
+server_dist
+.git
+*.md
+local.env
+.env
+.github
+attached_assets

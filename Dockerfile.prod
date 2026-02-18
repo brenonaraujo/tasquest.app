@@ -1,0 +1,62 @@
+# ============================================================
+# Stage 1: Builder — install deps, build Expo OTA + server
+# ============================================================
+FROM node:22-slim AS builder
+
+WORKDIR /app
+
+# Enable pnpm via corepack
+RUN corepack enable && corepack prepare pnpm@10.11.0 --activate
+
+# Copy dependency manifests first (layer cache)
+COPY package.json pnpm-lock.yaml ./
+COPY patches/ patches/
+
+# Install ALL dependencies (dev included — needed for Metro + esbuild)
+RUN pnpm install --frozen-lockfile
+
+# Copy the rest of the source
+COPY . .
+
+# The public domain where mobile clients will reach this server.
+# Gets baked into the Expo OTA bundles at Metro compile time.
+ARG EXPO_PUBLIC_DOMAIN
+RUN test -n "$EXPO_PUBLIC_DOMAIN" \
+    || (echo "ERROR: EXPO_PUBLIC_DOMAIN build arg is required" && exit 1)
+
+# Metro can be memory-hungry
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+
+# Build Expo static bundles (iOS + Android OTA manifests & JS bundles)
+RUN EXPO_PUBLIC_DOMAIN=${EXPO_PUBLIC_DOMAIN} node scripts/build.js
+
+# Bundle the Express server (ESM, external node_modules)
+RUN pnpm run server:build
+
+# ============================================================
+# Stage 2: Production — lean runtime image
+# ============================================================
+FROM node:22-slim AS production
+
+WORKDIR /app
+
+RUN corepack enable && corepack prepare pnpm@10.11.0 --activate
+
+# Install production dependencies only (skip postinstall — patch-package is devDep)
+COPY package.json pnpm-lock.yaml ./
+COPY patches/ patches/
+RUN pnpm install --frozen-lockfile --prod --ignore-scripts
+
+# Copy built artifacts from builder
+COPY --from=builder /app/server_dist ./server_dist
+COPY --from=builder /app/static-build ./static-build
+COPY --from=builder /app/assets ./assets
+COPY --from=builder /app/server/templates ./server/templates
+COPY --from=builder /app/app.json ./app.json
+
+ENV NODE_ENV=production
+ENV PORT=5000
+
+EXPOSE 5000
+
+CMD ["node", "server_dist/index.js"]

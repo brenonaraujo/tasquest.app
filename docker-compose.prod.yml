@@ -1,0 +1,52 @@
+# TaskQuest Social — Portainer Stack
+# Deploy via Portainer > Stacks > Add stack
+#
+# Prerequisites:
+#   1. Create the shared overlay network (run once on a manager node):
+#      docker network create --driver overlay --attachable taskquest-net
+#   2. Update the existing TaskQuest API stack to also join this network
+#      (add the networks section shown in the comments below)
+
+version: '3.8'
+
+services:
+  social:
+    image: ghcr.io/brenonaraujo/task-quest-social:latest
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+    ports:
+      - "5175:5000"
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      # Point to the API service via the shared overlay network.
+      # Format: http://<api-stack-name>_<service-name>:<container-port>
+      # If your API stack is named "taskquest" and the service is "api":
+      - TASKQUEST_API_URL=http://taskquest_api:3000
+      # Optional — only needed for the AI XP suggestion feature
+      - AI_INTEGRATIONS_OPENAI_API_KEY=${AI_INTEGRATIONS_OPENAI_API_KEY:-}
+    networks:
+      - taskquest-net
+
+networks:
+  taskquest-net:
+    external: true
+
+# ─── Add the following to your EXISTING TaskQuest API stack ───
+# (so the api service also joins the shared network)
+#
+#  services:
+#    api:
+#      ...existing config...
+#      networks:
+#        - default
+#        - taskquest-net
+#
+#  networks:
+#    taskquest-net:
+#      external: true
