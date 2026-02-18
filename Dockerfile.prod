@@ -31,7 +31,7 @@ ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN EXPO_PUBLIC_DOMAIN=${EXPO_PUBLIC_DOMAIN} node scripts/build.js
 
 # Bundle the Express server (ESM, external node_modules)
-RUN pnpm run server:build
+RUN npx esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=server_dist
 
 # ============================================================
 # Stage 2: Production — lean runtime image
