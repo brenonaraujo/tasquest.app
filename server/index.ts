@@ -199,7 +199,20 @@ function configureExpoAndLanding(app: express.Application) {
   });
 
   app.use("/assets", express.static(path.resolve(process.cwd(), "assets")));
-  app.use(express.static(path.resolve(process.cwd(), "static-build")));
+  app.use(
+    express.static(path.resolve(process.cwd(), "static-build"), {
+      setHeaders: (res, filePath) => {
+        // Prevent Cloudflare (and other CDNs) from caching bundle/asset responses
+        // This avoids the "Expected JavaScript, but got text/html" error when CF
+        // caches an HTML error page for a .js URL
+        if (filePath.endsWith(".js") || filePath.endsWith(".json")) {
+          res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+          res.setHeader("CDN-Cache-Control", "no-store");
+          res.setHeader("Cloudflare-CDN-Cache-Control", "no-store");
+        }
+      },
+    }),
+  );
 
   log("Expo routing: Checking expo-platform header on / and /manifest");
 }

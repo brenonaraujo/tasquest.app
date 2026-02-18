@@ -471,6 +471,29 @@ function updateManifests(manifests, timestamp, baseUrl, assetsByHash) {
       baseUrl.replace("https://", "") + "/" + platform;
     manifest.extra.expoGo.packagerOpts.dev = false;
 
+    // Clean up localhost Metro URLs that break in production.
+    // Metro embeds http://127.0.0.1:8081/... URLs for icons, splash, etc.
+    // These must point to the production server or be removed.
+    const client = manifest.extra.expoClient;
+    if (client.iconUrl && client.iconUrl.includes("127.0.0.1")) {
+      client.iconUrl = `${baseUrl}/assets/images/icon.png`;
+    }
+    if (client.splash?.imageUrl && client.splash.imageUrl.includes("127.0.0.1")) {
+      client.splash.imageUrl = `${baseUrl}/assets/images/splash-icon.png`;
+    }
+    if (client.android?.adaptiveIcon) {
+      const ai = client.android.adaptiveIcon;
+      if (ai.foregroundImageUrl && ai.foregroundImageUrl.includes("127.0.0.1")) {
+        ai.foregroundImageUrl = `${baseUrl}/assets/images/android-icon-foreground.png`;
+      }
+      if (ai.backgroundImageUrl && ai.backgroundImageUrl.includes("127.0.0.1")) {
+        ai.backgroundImageUrl = `${baseUrl}/assets/images/android-icon-background.png`;
+      }
+      if (ai.monochromeImageUrl && ai.monochromeImageUrl.includes("127.0.0.1")) {
+        ai.monochromeImageUrl = `${baseUrl}/assets/images/android-icon-monochrome.png`;
+      }
+    }
+
     if (manifest.assets && manifest.assets.length > 0) {
       manifest.assets.forEach((asset) => {
         if (!asset.url) return;

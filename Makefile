@@ -27,6 +27,14 @@ server:
 expo:
 	EXPO_PUBLIC_DOMAIN=localhost:5000 npx expo start
 
+## dev-device: Rodar dev para testar em dispositivo físico na rede local (ajuste o IP)
+dev-device:
+	@LOCAL_IP=$$(hostname -I | awk '{print $$1}'); \
+	trap 'kill 0' SIGINT; \
+	npm run server:dev & \
+	EXPO_PUBLIC_DOMAIN=$$LOCAL_IP:5000 npx expo start --host lan & \
+	wait
+
 ## expo-tunnel: Rodar Expo com tunnel (útil para testar em dispositivo físico)
 expo-tunnel:
 	EXPO_PUBLIC_DOMAIN=localhost:5000 npx expo start --tunnel
