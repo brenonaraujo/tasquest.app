@@ -54,6 +54,9 @@ COPY --from=builder /app/assets ./assets
 COPY --from=builder /app/server/templates ./server/templates
 COPY --from=builder /app/app.json ./app.json
 
+# Fix ESM warning: server is bundled as ESM by esbuild
+RUN node -e "const p=require('./package.json'); p.type='module'; require('fs').writeFileSync('package.json', JSON.stringify(p, null, 2))"
+
 ENV NODE_ENV=production
 ENV PORT=5000
 

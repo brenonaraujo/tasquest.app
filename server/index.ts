@@ -77,12 +77,10 @@ function setupRequestLogging(app: express.Application) {
     };
 
     res.on("finish", () => {
-      if (!path.startsWith("/api")) return;
-
       const duration = Date.now() - start;
 
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
+      if (path.startsWith("/api") && capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
 
