@@ -1,0 +1,1400 @@
+openapi: 3.1.0
+info:
+  title: TaskQuest API
+  version: 1.0.0
+  description: API do MVP TaskQuest (to-do social gamificado)
+servers:
+  - url: http://localhost:3000/v1
+
+tags:
+  - name: Auth
+  - name: Lists
+  - name: Tasks
+  - name: Subtasks
+  - name: Approvals
+  - name: Feed
+  - name: Comments
+  - name: Notifications
+  - name: Gamification
+  - name: Invites
+
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Registrar usuário
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Registrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Perfil do usuário autenticado
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /lists:
+    get:
+      tags: [Lists]
+      summary: Listar listas do usuário
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/SearchQuery'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskListCollectionResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Lists]
+      summary: Criar lista
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateListRequest'
+      responses:
+        '201':
+          description: Criada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskList'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /lists/{listId}:
+    get:
+      tags: [Lists]
+      summary: Obter lista por id
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ListId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskList'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Lists]
+      summary: Excluir lista
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ListId'
+      responses:
+        '204':
+          description: Lista excluída
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /lists/{listId}/members:
+    get:
+      tags: [Lists]
+      summary: Listar membros da lista
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ListId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListMemberCollectionResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Lists]
+      summary: Adicionar membro na lista
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ListId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddListMemberRequest'
+      responses:
+        '201':
+          description: Membro adicionado
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /lists/{listId}/members/{userId}:
+    delete:
+      tags: [Lists]
+      summary: Remover membro da lista
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ListId'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204':
+          description: Membro removido
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Lists]
+      summary: Atualizar papel de membro
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ListId'
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateListMemberRoleRequest'
+      responses:
+        '204':
+          description: Papel atualizado
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /lists/{listId}/invites:
+    post:
+      tags: [Invites]
+      summary: Gerar link de convite para lista
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ListId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateListInviteRequest'
+      responses:
+        '201':
+          description: Convite gerado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateListInviteResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /invites/{token}:
+    get:
+      tags: [Invites]
+      summary: Obter detalhes de convite
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/InviteToken'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListInviteResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { $ref: '#/components/responses/Conflict' }
+
+  /invites/{token}/accept:
+    post:
+      tags: [Invites]
+      summary: Aceitar convite de lista
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/InviteToken'
+      responses:
+        '200':
+          description: Convite aceito
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptListInviteResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { $ref: '#/components/responses/Conflict' }
+
+  /invites/{token}/reject:
+    post:
+      tags: [Invites]
+      summary: Recusar convite de lista
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/InviteToken'
+      responses:
+        '200':
+          description: Convite recusado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptListInviteResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { $ref: '#/components/responses/Conflict' }
+
+  /lists/{listId}/tasks:
+    get:
+      tags: [Tasks]
+      summary: Listar tarefas da lista
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ListId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/SearchQuery'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskCollectionResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Tasks]
+      summary: Criar tarefa na lista
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ListId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskRequest'
+      responses:
+        '201':
+          description: Criada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /tasks/{taskId}:
+    get:
+      tags: [Tasks]
+      summary: Obter tarefa
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Tasks]
+      summary: Excluir tarefa
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      responses:
+        '204':
+          description: Excluída
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /tasks/{taskId}/details:
+    get:
+      tags: [Tasks]
+      summary: Obter detalhes enriquecidos da tarefa
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskDetails'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /tasks/{taskId}/status:
+    patch:
+      tags: [Tasks]
+      summary: Atualizar status da tarefa
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTaskStatusRequest'
+      responses:
+        '200':
+          description: Tarefa atualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /tasks/{taskId}/assignee:
+    patch:
+      tags: [Tasks]
+      summary: Atribuir, reatribuir ou desatribuir tarefa
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTaskAssigneeRequest'
+      responses:
+        '200':
+          description: Tarefa atualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /tasks/{taskId}/subtasks:
+    post:
+      tags: [Subtasks]
+      summary: Criar subtarefa
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSubtaskRequest'
+      responses:
+        '201':
+          description: Subtarefa criada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subtask'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /subtasks/{subtaskId}:
+    patch:
+      tags: [Subtasks]
+      summary: Atualizar subtarefa
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/SubtaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSubtaskRequest'
+      responses:
+        '200':
+          description: Subtarefa atualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subtask'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Subtasks]
+      summary: Remover subtarefa
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/SubtaskId'
+      responses:
+        '204':
+          description: Subtarefa removida
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /tasks/{taskId}/start:
+    post:
+      tags: [Tasks]
+      summary: Iniciar execução da tarefa
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      responses:
+        '200':
+          description: Tarefa atualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /tasks/{taskId}/complete:
+    post:
+      tags: [Tasks]
+      summary: Concluir tarefa
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      responses:
+        '200':
+          description: Tarefa atualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /tasks/{taskId}/approve:
+    post:
+      tags: [Approvals]
+      summary: Aprovar tarefa pendente
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      responses:
+        '200':
+          description: Tarefa aprovada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /tasks/{taskId}/reject:
+    post:
+      tags: [Approvals]
+      summary: Rejeitar tarefa pendente
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectTaskRequest'
+      responses:
+        '200':
+          description: Tarefa rejeitada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /tasks/{taskId}/activity:
+    get:
+      tags: [Feed]
+      summary: Listar atividade de uma tarefa
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /tasks/{taskId}/comments:
+    get:
+      tags: [Comments]
+      summary: Listar comentários da tarefa
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskCommentCollectionResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Comments]
+      summary: Criar comentário na tarefa
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskCommentRequest'
+      responses:
+        '201':
+          description: Comentário criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskComment'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /comments/{commentId}/vote:
+    post:
+      tags: [Comments]
+      summary: Votar em comentário
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/CommentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VoteTaskCommentRequest'
+      responses:
+        '200':
+          description: Comentário atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskComment'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /feed:
+    get:
+      tags: [Feed]
+      summary: Feed principal do usuário
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/SearchQuery'
+        - in: query
+          name: includeDismissed
+          required: false
+          schema:
+            type: integer
+            enum: [1]
+          description: Quando `1`, inclui atividades suprimidas pelo usuário.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /feed/{feedItemId}/dismiss:
+    post:
+      tags: [Feed]
+      summary: Suprimir item do feed principal para o usuário atual
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/FeedItemId'
+      responses:
+        '204':
+          description: Item suprimido
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      tags: [Feed]
+      summary: Restaurar item suprimido no feed principal do usuário atual
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/FeedItemId'
+      responses:
+        '204':
+          description: Item restaurado
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /feed/{feedItemId}/restore:
+    post:
+      tags: [Feed]
+      summary: Marcar item como não oculto no feed principal do usuário atual
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/FeedItemId'
+      responses:
+        '204':
+          description: Item restaurado
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: Listar notificações do usuário
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /me/ledger:
+    get:
+      tags: [Gamification]
+      summary: Histórico de ganhos e gastos (XP/Energia) do usuário atual
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: resourceType
+          required: false
+          schema:
+            type: string
+            enum: [all, xp, energy]
+            default: all
+          description: Filtro por recurso. Padrão `all`.
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LedgerResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /notifications/{notificationId}/read:
+    post:
+      tags: [Notifications]
+      summary: Marcar notificação como lida
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/NotificationId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /gamification/xp-suggestions:
+    post:
+      tags: [Gamification]
+      summary: Sugerir XP para criação de tarefa
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/XPSuggestionRequest'
+      responses:
+        '200':
+          description: Sugestão gerada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XPSuggestionResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /gamification/leaderboard/global:
+    get:
+      tags: [Gamification]
+      summary: Ranking global
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaderboardResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /gamification/leaderboard/lists/{listId}:
+    get:
+      tags: [Gamification]
+      summary: Ranking por lista
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ListId'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaderboardResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ListId:
+      in: path
+      name: listId
+      required: true
+      schema: { type: string }
+    UserId:
+      in: path
+      name: userId
+      required: true
+      schema: { type: string }
+    TaskId:
+      in: path
+      name: taskId
+      required: true
+      schema: { type: string }
+    SubtaskId:
+      in: path
+      name: subtaskId
+      required: true
+      schema: { type: string }
+    CommentId:
+      in: path
+      name: commentId
+      required: true
+      schema: { type: string }
+    NotificationId:
+      in: path
+      name: notificationId
+      required: true
+      schema: { type: string }
+    FeedItemId:
+      in: path
+      name: feedItemId
+      required: true
+      schema: { type: string }
+    InviteToken:
+      in: path
+      name: token
+      required: true
+      schema: { type: string }
+    Cursor:
+      in: query
+      name: cursor
+      required: false
+      schema: { type: string }
+    Limit:
+      in: query
+      name: limit
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 51, default: 20 }
+    SearchQuery:
+      in: query
+      name: q
+      required: false
+      schema: { type: string, maxLength: 120 }
+
+  responses:
+    BadRequest:
+      description: Requisição inválida
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Não autenticado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Sem permissão
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Conflito de estado/regra
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unprocessable:
+      description: Regra de negócio violada
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 80 }
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+
+    AuthResponse:
+      type: object
+      required: [accessToken, user]
+      properties:
+        accessToken: { type: string }
+        user:
+          $ref: '#/components/schemas/UserProfile'
+
+    UserProfile:
+      type: object
+      required: [id, name, email, totalXp, level, xpToNextLevel, creationXpBalance]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string, format: email }
+        avatarUrl: { type: string, nullable: true }
+        totalXp: { type: integer }
+        level: { type: integer }
+        xpToNextLevel: { type: integer }
+        creationXpBalance: { type: integer }
+
+    CreateListRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 80 }
+        description: { type: string, maxLength: 500, nullable: true }
+
+    CreateListInviteRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+
+    CreateListInviteResponse:
+      type: object
+      required: [token, invitePath, email, role, expiresAt]
+      properties:
+        token: { type: string }
+        invitePath: { type: string }
+        email: { type: string, format: email }
+        role: { type: string, enum: [member] }
+        expiresAt: { type: string, format: date-time }
+
+    ListInviteResponse:
+      type: object
+      required: [listId, listName, role, invitedByName, expiresAt]
+      properties:
+        listId: { type: string }
+        listName: { type: string }
+        role: { type: string, enum: [owner, admin, member] }
+        invitedByName: { type: string }
+        expiresAt: { type: string, format: date-time }
+        acceptedAt: { type: string, format: date-time, nullable: true }
+        revokedAt: { type: string, format: date-time, nullable: true }
+
+    AcceptListInviteResponse:
+      type: object
+      required: [listId]
+      properties:
+        listId: { type: string }
+
+    AddListMemberRequest:
+      type: object
+      required: [role]
+      properties:
+        userId: { type: string }
+        email: { type: string, format: email }
+        role:
+          type: string
+          enum: [admin, member]
+
+    UpdateListMemberRoleRequest:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [admin, member]
+
+    ListMember:
+      type: object
+      required: [id, userId, role, status, name, email, createdAt]
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        role: { type: string, enum: [owner, admin, member] }
+        status: { type: string, enum: [active, pending] }
+        name: { type: string }
+        email: { type: string, format: email }
+        avatarUrl: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    ListMemberCollectionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ListMember'
+
+    TaskList:
+      type: object
+      required: [id, ownerUserId, name, isShared]
+      properties:
+        id: { type: string }
+        ownerUserId: { type: string }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        isShared: { type: boolean }
+
+    TaskListCollectionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskList'
+        nextCursor: { type: string, nullable: true }
+
+    CreateTaskRequest:
+      type: object
+      required: [title, rewardXp]
+      properties:
+        title: { type: string, minLength: 2, maxLength: 120 }
+        description: { type: string, maxLength: 1000, nullable: true }
+        dueAt: { type: string, format: date-time, nullable: true }
+        rewardXp: { type: integer, minimum: 5, maximum: 50 }
+        needsApproval: { type: boolean, default: false }
+        assigneeUserId: { type: string, nullable: true }
+
+    UpdateTaskStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [open, in_progress, cancelled]
+
+    UpdateTaskAssigneeRequest:
+      type: object
+      required: [assigneeUserId]
+      properties:
+        assigneeUserId: { type: string, nullable: true }
+
+    CreateSubtaskRequest:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 120 }
+
+    UpdateSubtaskRequest:
+      type: object
+      properties:
+        title: { type: string, minLength: 1, maxLength: 120 }
+        isDone: { type: boolean }
+
+    RejectTaskRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 5, maxLength: 500 }
+
+    Task:
+      type: object
+      required: [id, listId, creatorUserId, title, rewardXp, needsApproval, status, subtasks]
+      properties:
+        id: { type: string }
+        listId: { type: string }
+        creatorUserId: { type: string }
+        assigneeUserId: { type: string, nullable: true }
+        title: { type: string }
+        description: { type: string, nullable: true }
+        dueAt: { type: string, format: date-time, nullable: true }
+        rewardXp: { type: integer }
+        needsApproval: { type: boolean }
+        status:
+          type: string
+          enum: [open, in_progress, pending_approval, completed, cancelled]
+        completedAt: { type: string, format: date-time, nullable: true }
+        subtasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Subtask'
+
+    TaskCollectionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+        nextCursor: { type: string, nullable: true }
+
+    Subtask:
+      type: object
+      required: [id, taskId, title, isDone]
+      properties:
+        id: { type: string }
+        taskId: { type: string }
+        title: { type: string }
+        isDone: { type: boolean }
+
+    TaskUserSummary:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        avatarUrl: { type: string, nullable: true }
+
+    TaskDetails:
+      type: object
+      required: [task, creator, assignableUsers, canManageAssignee]
+      properties:
+        task:
+          $ref: '#/components/schemas/Task'
+        creator:
+          $ref: '#/components/schemas/TaskUserSummary'
+        assignee:
+          allOf:
+            - $ref: '#/components/schemas/TaskUserSummary'
+          nullable: true
+        assignableUsers:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskUserSummary'
+        canManageAssignee: { type: boolean }
+
+    CreateTaskCommentRequest:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string, minLength: 1, maxLength: 2000 }
+        parentCommentId: { type: string, nullable: true }
+
+    VoteTaskCommentRequest:
+      type: object
+      required: [value]
+      properties:
+        value:
+          type: integer
+          enum: [-1, 0, 1]
+
+    TaskComment:
+      type: object
+      required: [id, taskId, author, content, likes, dislikes, userVote, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        taskId: { type: string }
+        parentCommentId: { type: string, nullable: true }
+        author:
+          $ref: '#/components/schemas/TaskUserSummary'
+        content: { type: string }
+        likes: { type: integer }
+        dislikes: { type: integer }
+        userVote: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    TaskCommentCollectionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskComment'
+
+    FeedItem:
+      type: object
+      required: [id, type, payload, createdAt]
+      properties:
+        id: { type: string }
+        type:
+          type: string
+          enum:
+            - task_created
+            - task_started
+            - task_completed
+            - task_pending_approval
+            - task_approved
+            - task_rejected
+            - list_invite_created
+            - user_level_up
+            - reminder_due_today
+        actorUserId: { type: string, nullable: true }
+        targetUserId: { type: string, nullable: true }
+        taskId: { type: string, nullable: true }
+        listId: { type: string, nullable: true }
+        payload:
+          type: object
+          additionalProperties: true
+        createdAt: { type: string, format: date-time }
+
+    FeedResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/FeedItem'
+        nextCursor: { type: string, nullable: true }
+
+    Notification:
+      type: object
+      required: [id, type, title, message, isRead, payload, createdAt]
+      properties:
+        id: { type: string }
+        type:
+          type: string
+          enum:
+            - task_assigned
+            - task_pending_approval
+            - task_approved
+            - task_rejected
+            - list_invite_received
+            - user_level_up
+        title: { type: string }
+        message: { type: string }
+        taskId: { type: string, nullable: true }
+        isRead: { type: boolean }
+        readAt: { type: string, format: date-time, nullable: true }
+        payload:
+          type: object
+          additionalProperties: true
+        createdAt: { type: string, format: date-time }
+
+    NotificationResponse:
+      type: object
+      required: [data, unreadCount]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'
+        unreadCount: { type: integer, minimum: 0 }
+
+    LedgerEntry:
+      type: object
+      required:
+        [id, resourceType, direction, amount, sourceType, balanceAfter, metadata, createdAt]
+      properties:
+        id: { type: string }
+        resourceType:
+          type: string
+          enum: [xp, energy]
+        direction:
+          type: string
+          enum: [credit, debit]
+        amount: { type: integer, minimum: 0 }
+        sourceType: { type: string }
+        sourceId: { type: string, nullable: true }
+        balanceAfter: { type: integer, minimum: 0 }
+        metadata:
+          type: object
+          additionalProperties: true
+        createdAt: { type: string, format: date-time }
+
+    LedgerResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/LedgerEntry'
+
+    XPSuggestionRequest:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string }
+        description: { type: string }
+
+    XPSuggestionResponse:
+      type: object
+      required: [suggestedXp, justification]
+      properties:
+        suggestedXp: { type: integer, minimum: 5, maximum: 50 }
+        justification: { type: string }
+
+    LeaderboardEntry:
+      type: object
+      required: [userId, name, totalXp, level, completedTasks]
+      properties:
+        userId: { type: string }
+        name: { type: string }
+        avatarUrl: { type: string, nullable: true }
+        totalXp: { type: integer }
+        level: { type: integer }
+        completedTasks: { type: integer }
+
+    LeaderboardResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeaderboardEntry'
+        nextCursor: { type: string, nullable: true }
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details:
+              type: object
+              additionalProperties: true

@@ -92,10 +92,18 @@ export default function ListDetailScreen() {
             {listData?.name || "List"}
           </Text>
           {listData?.isShared ? (
-            <View style={styles.sharedTag}>
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push({ pathname: "/(lists)/members/[id]", params: { id } });
+              }}
+              hitSlop={8}
+              style={({ pressed }) => [styles.sharedTag, pressed && { opacity: 0.7 }]}
+            >
               <Ionicons name="people" size={10} color={Colors.secondary} />
               <Text style={styles.sharedTagText}>{members.length} members</Text>
-            </View>
+              <Ionicons name="person-add-outline" size={15} color={Colors.primary} />
+            </Pressable>
           ) : null}
         </View>
         <Pressable
@@ -215,7 +223,18 @@ const styles = StyleSheet.create({
   },
   topBarCenter: { flex: 1, gap: 2 },
   topTitle: { fontSize: 20, fontFamily: "Inter_700Bold", color: Colors.text },
-  sharedTag: { flexDirection: "row", alignItems: "center", gap: 4 },
+  sharedTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: Colors.secondary + "15",
+    borderWidth: 1,
+    borderColor: Colors.secondary + "30",
+  },
   sharedTagText: { fontSize: 11, fontFamily: "Inter_500Medium", color: Colors.secondary },
   descBox: { paddingHorizontal: 16, paddingBottom: 8 },
   descText: { fontSize: 13, color: Colors.textSecondary, fontFamily: "Inter_400Regular" },

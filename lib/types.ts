@@ -191,6 +191,20 @@ export interface CreateListInviteResponse {
   expiresAt: string;
 }
 
+export interface ListInviteResponse {
+  listId: string;
+  listName: string;
+  role: "owner" | "admin" | "member";
+  invitedByName: string;
+  expiresAt: string;
+  acceptedAt?: string | null;
+  revokedAt?: string | null;
+}
+
+export interface AcceptListInviteResponse {
+  listId: string;
+}
+
 export interface CreateSubtaskRequest {
   title: string;
 }

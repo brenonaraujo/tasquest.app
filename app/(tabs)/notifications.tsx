@@ -117,6 +117,13 @@ export default function NotificationsScreen() {
                 markReadMutation.mutate(item.id);
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               }
+
+              const inviteToken = getInviteToken(item.payload || {});
+              if (item.type === "list_invite_received" && inviteToken) {
+                router.push({ pathname: "/invite/[token]", params: { token: inviteToken } });
+                return;
+              }
+
               if (item.taskId) {
                 router.push({ pathname: "/task/[id]", params: { id: item.taskId } });
               }
@@ -158,6 +165,19 @@ export default function NotificationsScreen() {
       />
     </View>
   );
+}
+
+function getInviteToken(payload: Record<string, unknown>): string | null {
+  const directToken = payload.token || payload.inviteToken || payload.invite_token;
+  if (typeof directToken === "string" && directToken.length > 0) return directToken;
+
+  const invitePath = payload.invitePath || payload.invite_path || payload.path;
+  if (typeof invitePath === "string") {
+    const match = invitePath.match(/invites\/(.+)$/);
+    if (match?.[1]) return match[1];
+  }
+
+  return null;
 }
 
 function NotifCard({ notification, onPress, isMarkingRead }: { notification: Notification; onPress: () => void; isMarkingRead?: boolean }) {
