@@ -199,6 +199,9 @@ function configureExpoAndLanding(app: express.Application) {
   app.use("/assets", express.static(path.resolve(process.cwd(), "assets")));
   app.use(
     express.static(path.resolve(process.cwd(), "static-build"), {
+      // pnpm stores assets under .pnpm/ (dot-prefixed directory).
+      // Express.static ignores dotfiles by default, causing 404 for fonts/images.
+      dotfiles: "allow",
       setHeaders: (res, filePath) => {
         // Prevent Cloudflare (and other CDNs) from caching bundle/asset responses
         // This avoids the "Expected JavaScript, but got text/html" error when CF
