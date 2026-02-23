@@ -471,6 +471,10 @@ function updateManifests(manifests, timestamp, baseUrl, assetsByHash) {
       baseUrl.replace("https://", "") + "/" + platform;
     manifest.extra.expoGo.packagerOpts.dev = false;
 
+    // Remove dev-only developer flag — when truthy, expo-asset resolves
+    // assets via debuggerHost (dev server path) instead of production URLs.
+    delete manifest.extra.expoGo.developer;
+
     // Clean up localhost Metro URLs that break in production.
     // Metro embeds http://127.0.0.1:8081/... URLs for icons, splash, etc.
     // These must point to the production server or be removed.
