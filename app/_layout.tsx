@@ -14,6 +14,7 @@ import {
   Inter_600SemiBold,
   Inter_700Bold,
 } from "@expo-google-fonts/inter";
+import { Ionicons, Feather } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
 import Colors from "@/constants/colors";
 
@@ -62,6 +63,8 @@ export default function RootLayout() {
     Inter_500Medium,
     Inter_600SemiBold,
     Inter_700Bold,
+    ...Ionicons.font,
+    ...Feather.font,
   });
 
   useEffect(() => {
