@@ -49,7 +49,7 @@ jobs:
     steps:
       - name: Trigger Portainer Webhook
         run: |
-          WEBHOOK_URL="http://portainer.home.server/api/stacks/webhooks/358cecdc-19bd-4cb6-bd58-65a445986939"
+          WEBHOOK_URL="http://portainer.brenon.cloud/api/stacks/webhooks/358cecdc-19bd-4cb6-bd58-65a445986939"
           if [ -n "$WEBHOOK_URL" ]; then
             curl -X POST "$WEBHOOK_URL"
           else
