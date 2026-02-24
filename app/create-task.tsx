@@ -21,12 +21,14 @@ import Colors from "@/constants/colors";
 import { apiRequest, queryClient, getApiUrl, getAuthToken } from "@/lib/query-client";
 import { fetch } from "expo/fetch";
 import { useAuth } from "@/lib/auth-context";
+import { useGamificationHints } from "@/lib/gamification-hints";
 import type { XPSuggestionResponse, TaskList, ListMember } from "@/lib/types";
 import { format } from "date-fns";
 
 export default function CreateTaskScreen() {
   const params = useLocalSearchParams<{ listId?: string }>();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, refreshProfile } = useAuth();
+  const { syncFromLedger } = useGamificationHints();
   const [selectedListId, setSelectedListId] = useState(params.listId || "");
   const [showListPicker, setShowListPicker] = useState(!params.listId);
   const [title, setTitle] = useState("");
@@ -112,12 +114,14 @@ export default function CreateTaskScreen() {
         await apiRequest("POST", `/api/v1/tasks/${task.id}/subtasks`, { title: st.trim() });
       }
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       queryClient.invalidateQueries({ queryKey: [`/api/v1/lists/${selectedListId}/tasks`] });
       queryClient.invalidateQueries({ queryKey: ["/api/v1/feed"] });
       queryClient.invalidateQueries({ queryKey: ["/api/v1/notifications"] });
       queryClient.invalidateQueries({ queryKey: ["/api/v1/active-tasks"] });
+      await refreshProfile();
+      await syncFromLedger();
       router.back();
     },
     onError: (err: Error) => {

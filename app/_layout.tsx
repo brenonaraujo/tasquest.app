@@ -16,6 +16,7 @@ import {
 } from "@expo-google-fonts/inter";
 import { StatusBar } from "expo-status-bar";
 import Colors from "@/constants/colors";
+import { GamificationHintsProvider } from "@/lib/gamification-hints";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -78,8 +79,10 @@ export default function RootLayout() {
         <GestureHandlerRootView style={{ flex: 1, backgroundColor: Colors.background }}>
           <KeyboardProvider>
             <AuthProvider>
-              <StatusBar style="light" />
-              <RootLayoutNav />
+              <GamificationHintsProvider>
+                <StatusBar style="light" />
+                <RootLayoutNav />
+              </GamificationHintsProvider>
             </AuthProvider>
           </KeyboardProvider>
         </GestureHandlerRootView>

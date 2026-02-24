@@ -19,6 +19,7 @@ import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import { useAuth } from "@/lib/auth-context";
 import { apiRequest, queryClient } from "@/lib/query-client";
+import { useGamificationHints } from "@/lib/gamification-hints";
 import type { ListMember, Task, TaskComment, TaskDetails, UpdateTaskApproverRequest, VoteTaskCommentRequest } from "@/lib/types";
 import { format } from "date-fns";
 
@@ -34,6 +35,7 @@ export default function TaskDetailScreen() {
   const { id, listId } = useLocalSearchParams<{ id: string; listId?: string }>();
   const insets = useSafeAreaInsets();
   const { user, isAuthenticated, refreshProfile } = useAuth();
+  const { syncFromLedger } = useGamificationHints();
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
   const [commentText, setCommentText] = useState("");
@@ -68,7 +70,7 @@ export default function TaskDetailScreen() {
   const activeMembers = useMemo(() => members.filter((m) => m.status === "active"), [members]);
   const approver = members.find((m) => m.userId === task?.approverUserId);
 
-  function invalidateAll() {
+  async function invalidateAll() {
     refetch();
     refetchComments();
     const lid = listId || task?.listId;
@@ -76,22 +78,32 @@ export default function TaskDetailScreen() {
     queryClient.invalidateQueries({ queryKey: ["/api/v1/feed"] });
     queryClient.invalidateQueries({ queryKey: ["/api/v1/notifications"] });
     queryClient.invalidateQueries({ queryKey: ["/api/v1/active-tasks"] });
-    refreshProfile();
+    await refreshProfile();
+    await syncFromLedger();
   }
 
   const startMutation = useMutation({
     mutationFn: () => apiRequest("POST", `/api/v1/tasks/${id}/start`),
-    onSuccess: () => { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); invalidateAll(); },
+    onSuccess: async () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await invalidateAll();
+    },
   });
 
   const completeMutation = useMutation({
     mutationFn: () => apiRequest("POST", `/api/v1/tasks/${id}/complete`),
-    onSuccess: () => { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); invalidateAll(); },
+    onSuccess: async () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await invalidateAll();
+    },
   });
 
   const approveMutation = useMutation({
     mutationFn: () => apiRequest("POST", `/api/v1/tasks/${id}/approve`),
-    onSuccess: () => { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success); invalidateAll(); },
+    onSuccess: async () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await invalidateAll();
+    },
     onError: (err: Error) => {
       Alert.alert("Approval failed", err.message || "You are not allowed to approve this task");
     },
@@ -99,7 +111,9 @@ export default function TaskDetailScreen() {
 
   const rejectMutation = useMutation({
     mutationFn: (reason: string) => apiRequest("POST", `/api/v1/tasks/${id}/reject`, { reason }),
-    onSuccess: () => { invalidateAll(); },
+    onSuccess: async () => {
+      await invalidateAll();
+    },
     onError: (err: Error) => {
       Alert.alert("Rejection failed", err.message || "You are not allowed to reject this task");
     },
@@ -113,7 +127,7 @@ export default function TaskDetailScreen() {
     onSuccess: () => {
       setShowApproverPicker(false);
       setPendingApproverId(null);
-      invalidateAll();
+      void invalidateAll();
       if (task?.status === "pending_approval") {
         Alert.alert(
           "Approver updated",
@@ -129,10 +143,11 @@ export default function TaskDetailScreen() {
 
   const commentMutation = useMutation({
     mutationFn: (content: string) => apiRequest("POST", `/api/v1/tasks/${id}/comments`, { content }),
-    onSuccess: () => {
+    onSuccess: async () => {
       setCommentText("");
       refetchComments();
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      await syncFromLedger();
     },
   });
 
@@ -142,10 +157,11 @@ export default function TaskDetailScreen() {
       setVotingDirection((prev) => ({ ...prev, [commentId]: value >= 0 ? "up" : "down" }));
       return apiRequest("POST", `/api/v1/comments/${commentId}/vote`, { value } as VoteTaskCommentRequest);
     },
-    onSuccess: (_data, { commentId }) => {
+    onSuccess: async (_data, { commentId }) => {
       setVotingComments((prev) => { const n = new Set(prev); n.delete(commentId); return n; });
       setVotingDirection((prev) => { const n = { ...prev }; delete n[commentId]; return n; });
       refetchComments();
+      await syncFromLedger();
     },
     onError: (_err, { commentId }) => {
       setVotingComments((prev) => { const n = new Set(prev); n.delete(commentId); return n; });
