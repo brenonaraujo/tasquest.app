@@ -1,12 +1,13 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { Stack, router } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
+import * as Notifications from "expo-notifications";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { queryClient } from "@/lib/query-client";
-import { AuthProvider } from "@/lib/auth-context";
+import { AuthProvider, useAuth } from "@/lib/auth-context";
 import {
   useFonts,
   Inter_400Regular,
@@ -17,6 +18,10 @@ import {
 import { StatusBar } from "expo-status-bar";
 import Colors from "@/constants/colors";
 import { GamificationHintsProvider } from "@/lib/gamification-hints";
+import {
+  getNotificationNavigationTarget,
+  syncPushTokenWithBackend,
+} from "@/lib/push-notifications";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -57,6 +62,48 @@ function RootLayoutNav() {
   );
 }
 
+function PushNotificationsBootstrap() {
+  const { isAuthenticated } = useAuth();
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    void syncPushTokenWithBackend();
+
+    const handleResponse = (response: Notifications.NotificationResponse) => {
+      const target = getNotificationNavigationTarget(response.notification.request.content.data);
+
+      if (target.type === "task") {
+        router.push({ pathname: "/task/[id]", params: { id: target.taskId } });
+        return;
+      }
+
+      if (target.type === "invite") {
+        router.push({ pathname: "/invite/[token]", params: { token: target.token } });
+        return;
+      }
+
+      router.push("/(tabs)/notifications");
+    };
+
+    const responseListener = Notifications.addNotificationResponseReceivedListener(handleResponse);
+
+    void Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (response) {
+        handleResponse(response);
+      }
+    });
+
+    return () => {
+      responseListener.remove();
+    };
+  }, [isAuthenticated]);
+
+  return null;
+}
+
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
@@ -81,6 +128,7 @@ export default function RootLayout() {
             <AuthProvider>
               <GamificationHintsProvider>
                 <StatusBar style="light" />
+                <PushNotificationsBootstrap />
                 <RootLayoutNav />
               </GamificationHintsProvider>
             </AuthProvider>

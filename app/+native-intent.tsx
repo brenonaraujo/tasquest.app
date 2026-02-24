@@ -2,5 +2,10 @@ export function redirectSystemPath({
   path,
   initial,
 }: { path: string; initial: boolean }) {
-  return '/';
+  if (!path) {
+    return "/";
+  }
+
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return normalizedPath;
 }

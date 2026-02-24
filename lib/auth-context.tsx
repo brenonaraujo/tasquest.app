@@ -3,6 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { fetch } from "expo/fetch";
 import type { UserProfile, AuthResponse } from "./types";
 import { getApiUrl, setAuthToken, queryClient } from "./query-client";
+import { syncPushTokenWithBackend, unregisterPushTokenFromBackend } from "./push-notifications";
 
 const TOKEN_KEY = "taskquest_token";
 
@@ -26,6 +27,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     loadStoredAuth();
   }, []);
+
+  useEffect(() => {
+    if (isLoading || !user) {
+      return;
+    }
+
+    void syncPushTokenWithBackend();
+  }, [isLoading, user]);
 
   async function loadStoredAuth() {
     try {
@@ -81,6 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthToken(data.accessToken);
     setUser(data.user);
     queryClient.clear();
+    void syncPushTokenWithBackend();
   }
 
   async function register(name: string, email: string, password: string) {
@@ -102,9 +112,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthToken(data.accessToken);
     setUser(data.user);
     queryClient.clear();
+    void syncPushTokenWithBackend();
   }
 
   async function logout() {
+    await unregisterPushTokenFromBackend();
     await AsyncStorage.removeItem(TOKEN_KEY);
     setAuthToken(null);
     setUser(null);

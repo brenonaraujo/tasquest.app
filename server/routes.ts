@@ -3,6 +3,46 @@ import { createServer, type Server } from "node:http";
 import OpenAI from "openai";
 
 const TASKQUEST_API_URL = process.env.TASKQUEST_API_URL || "http://localhost:3000";
+const TASKQUEST_PUSH_REGISTER_PATH = process.env.TASKQUEST_PUSH_REGISTER_PATH || "/v1/push-tokens";
+const TASKQUEST_PUSH_UNREGISTER_PATH = process.env.TASKQUEST_PUSH_UNREGISTER_PATH || "/v1/push-tokens/revoke";
+
+async function forwardPushTokenRequest(req: Request, res: Response, upstreamPath: string) {
+  const url = `${TASKQUEST_API_URL}${upstreamPath}`;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (req.headers.authorization) {
+    headers.Authorization = req.headers.authorization as string;
+  }
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(req.body || {}),
+    });
+
+    if (response.status === 204) {
+      return res.status(204).send();
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      const payload = await response.json();
+      return res.status(response.status).json(payload);
+    }
+
+    const text = await response.text();
+    return res.status(response.status).send(text);
+  } catch (error) {
+    console.error("Push token proxy error:", error);
+    return res.status(502).json({
+      error: { code: "PROXY_ERROR", message: "Failed to register push token" },
+    });
+  }
+}
 
 async function proxyToApi(req: Request, res: Response) {
   const path = req.path.replace("/api/v1", "/v1");
@@ -81,6 +121,14 @@ async function proxyToApi(req: Request, res: Response) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  app.post("/api/push/register", async (req: Request, res: Response) => {
+    return forwardPushTokenRequest(req, res, TASKQUEST_PUSH_REGISTER_PATH);
+  });
+
+  app.post("/api/push/unregister", async (req: Request, res: Response) => {
+    return forwardPushTokenRequest(req, res, TASKQUEST_PUSH_UNREGISTER_PATH);
+  });
+
   app.post("/api/xp-suggest", async (req: Request, res: Response) => {
     try {
       const { title, description } = req.body;
