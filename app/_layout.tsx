@@ -22,6 +22,7 @@ import {
   getNotificationNavigationTarget,
   syncPushTokenWithBackend,
 } from "@/lib/push-notifications";
+import { useLocalNotificationBridge } from "@/lib/use-local-notification-bridge";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -64,6 +65,8 @@ function RootLayoutNav() {
 
 function PushNotificationsBootstrap() {
   const { isAuthenticated } = useAuth();
+
+  useLocalNotificationBridge();
 
   useEffect(() => {
     if (!isAuthenticated) {
