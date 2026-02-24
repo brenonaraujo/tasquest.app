@@ -1,4 +1,4 @@
-.PHONY: help dev server expo install lint lint-fix
+.PHONY: help dev run server expo install lint lint-fix
 
 # Load env files if they exist (local.env takes precedence over .env)
 -include .env
@@ -18,6 +18,9 @@ dev:
 	npm run server:dev & \
 	EXPO_PUBLIC_DOMAIN=localhost:5000 npx expo start & \
 	wait
+
+## run: Alias para dev
+run: dev
 
 ## server: Rodar apenas o servidor Express (porta 5000)
 server:

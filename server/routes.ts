@@ -5,6 +5,25 @@ import OpenAI from "openai";
 const TASKQUEST_API_URL = process.env.TASKQUEST_API_URL || "http://localhost:3000";
 const TASKQUEST_PUSH_REGISTER_PATH = process.env.TASKQUEST_PUSH_REGISTER_PATH || "/v1/push-tokens";
 const TASKQUEST_PUSH_UNREGISTER_PATH = process.env.TASKQUEST_PUSH_UNREGISTER_PATH || "/v1/push-tokens/revoke";
+const TASKQUEST_PUSH_SEND_PATH = process.env.TASKQUEST_PUSH_SEND_PATH || "";
+const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
+
+type PushTestBody = {
+  token?: string;
+  title?: string;
+  body?: string;
+  data?: Record<string, unknown>;
+  sound?: "default" | null;
+  badge?: number;
+};
+
+function getAuthorizationHeader(req: Request): string | null {
+  if (!req.headers.authorization || typeof req.headers.authorization !== "string") {
+    return null;
+  }
+
+  return req.headers.authorization;
+}
 
 async function forwardPushTokenRequest(req: Request, res: Response, upstreamPath: string) {
   const url = `${TASKQUEST_API_URL}${upstreamPath}`;
@@ -40,6 +59,91 @@ async function forwardPushTokenRequest(req: Request, res: Response, upstreamPath
     console.error("Push token proxy error:", error);
     return res.status(502).json({
       error: { code: "PROXY_ERROR", message: "Failed to register push token" },
+    });
+  }
+}
+
+async function forwardPushSendRequest(req: Request, res: Response) {
+  const url = `${TASKQUEST_API_URL}${TASKQUEST_PUSH_SEND_PATH}`;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  const authorization = getAuthorizationHeader(req);
+  if (authorization) {
+    headers.Authorization = authorization;
+  }
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(req.body || {}),
+    });
+
+    if (response.status === 204) {
+      return res.status(204).send();
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      const payload = await response.json();
+      return res.status(response.status).json(payload);
+    }
+
+    const text = await response.text();
+    return res.status(response.status).send(text);
+  } catch (error) {
+    console.error("Push send proxy error:", error);
+    return res.status(502).json({
+      error: { code: "PROXY_ERROR", message: "Failed to send push notification" },
+    });
+  }
+}
+
+async function sendPushWithExpoService(req: Request, res: Response) {
+  const payload = (req.body || {}) as PushTestBody;
+  const token = typeof payload.token === "string" ? payload.token.trim() : "";
+
+  if (!token) {
+    return res.status(400).json({
+      error: { code: "BAD_REQUEST", message: "token is required when TASKQUEST_PUSH_SEND_PATH is not configured" },
+    });
+  }
+
+  const message = {
+    to: token,
+    title: payload.title || "TaskQuest",
+    body: payload.body || "Você recebeu uma nova notificação",
+    data: payload.data || {},
+    sound: payload.sound === null ? undefined : payload.sound || "default",
+    badge: Number.isFinite(payload.badge) ? payload.badge : undefined,
+    priority: "high" as const,
+  };
+
+  const expoHeaders: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
+
+  const accessToken = process.env.EXPO_ACCESS_TOKEN;
+  if (accessToken) {
+    expoHeaders.Authorization = `Bearer ${accessToken}`;
+  }
+
+  try {
+    const response = await fetch(EXPO_PUSH_URL, {
+      method: "POST",
+      headers: expoHeaders,
+      body: JSON.stringify(message),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    return res.status(response.status).json(data);
+  } catch (error) {
+    console.error("Expo push send error:", error);
+    return res.status(502).json({
+      error: { code: "PUSH_SEND_ERROR", message: "Failed to send push via Expo service" },
     });
   }
 }
@@ -127,6 +231,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/push/unregister", async (req: Request, res: Response) => {
     return forwardPushTokenRequest(req, res, TASKQUEST_PUSH_UNREGISTER_PATH);
+  });
+
+  app.post("/api/push/test-send", async (req: Request, res: Response) => {
+    if (TASKQUEST_PUSH_SEND_PATH) {
+      return forwardPushSendRequest(req, res);
+    }
+
+    return sendPushWithExpoService(req, res);
   });
 
   app.post("/api/xp-suggest", async (req: Request, res: Response) => {

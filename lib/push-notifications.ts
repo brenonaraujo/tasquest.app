@@ -98,6 +98,10 @@ export async function syncPushTokenWithBackend(): Promise<void> {
       return;
     }
 
+    if (__DEV__) {
+      console.log("[push] Expo token", token);
+    }
+
     const cachedToken = await AsyncStorage.getItem(PUSH_TOKEN_KEY);
     if (cachedToken === token) {
       return;
